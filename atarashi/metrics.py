@@ -85,7 +85,7 @@ class Auc(Metrics):
 
     def update(self, args):
         pred, label = args
-        pred = pred.reshape([-1])
+        pred = pred.reshape([-1]).astype(np.float32)
         label = label.reshape([-1]).astype(np.bool)
         self.pred_saver = np.concatenate([self.pred_saver, pred])
         self.label_saver = np.concatenate([self.label_saver, label])

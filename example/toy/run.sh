@@ -1,5 +1,5 @@
 #!/bin/sh
-export PYTHONPATH=./atarashi-paddle/:./bin/atarashi/protos/:$PYTHONPATH
+#export PYTHONPATH=./atarashi-paddle/:./bin/atarashi/protos/:$PYTHONPATH
 
 python=./app/bin/python3
 
@@ -8,27 +8,28 @@ python=./app/bin/python3
 echo "Using gpu env ${CUDA_VISIBLE_DEVICES}"
 #${python} ./dataset_test.py \
 
-${python} ./paddle_toy3.py \
-    --train_data_dir ./data_ernie/train_gz/ \
-    --eval_data_dir  ./data_ernie/dev_gz/ \
-    --vocab_file ./data_2/vocab \
+${python} ./toy/main.py \
+    --train_data_dir ./data_ernie/train/ \
+    --eval_data_dir  ./data_ernie/dev/ \
     --max_seqlen 128 \
     --run_config '{
-        "batch_size": 25,
-        "model_dir": "./models/toy_8",
-        "max_steps": 10000000,
-        "save_steps": 1000,
-        "log_steps": 100,
-        "skip_steps": 100, # comment
-        "eval_steps": 1000,
+        "batch_size": 32,
+        "model_dir": "./models/toy_9",
+        "max_steps": 60000,
+        "save_steps": 1000000,
+        "log_steps": 10,
+        "skip_steps": 10, # comment
+        "eval_steps": 100,
         "shit": 0
     }' \
     --hparam '{
         "hidden_size": 256,
-        "vocab_size": 300000,
+        "vocab_size": 50000,
         "embedding_size": 256,
         "num_layers": 3,
-        "learning_rate": 0.001
+        "learning_rate": 0.0001
     }' \
-    --vocab_size 300000 
+    --vocab_size 50000  \
+    --vocab_file ernie_model/vocab.txt 
+
 

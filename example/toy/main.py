@@ -24,10 +24,8 @@ import paddle.fluid.layers as L
 from random import random
 import jieba
 
-from model import BertModel
-from optimization import optimization
-
 import atarashi
+import atarashi.data
 from atarashi import log
 
 # 你可以使用任何你喜欢的paddle框架，来构建网络. 比如PARL
@@ -85,17 +83,16 @@ class Model(object):
         for i in range(self.num_layers):
             comment_encoded = FC(comment_encoded, 'comment', i, 'tanh')
 
-        score = L.reduce_sum(title_encoded * comment_encoded, dim=-1, keep_dim=True) / np.sqrt(self.hidden_size)
+        score = L.reduce_sum(title_encoded * comment_encoded, dim=1, keep_dim=True) / np.sqrt(self.hidden_size)
         if self.mode is atarashi.RunMode.PREDICT:
-            probs = L.softmax(score)
+            probs = L.sigmoid(score)
             return probs
         else:
             return score
 
     def loss(self, predictions, labels):
-        ce_loss, probs = L.softmax_with_cross_entropy(
-            logits=predictions, label=labels, return_softmax=True)
-        loss = L.mean(x=ce_loss)
+        per_example_loss = L.sigmoid_cross_entropy_with_logits(predictions, L.cast(labels, 'float32')) 
+        loss = L.reduce_mean(per_example_loss)
         return loss
 
     def backward(self, loss):
@@ -104,10 +101,9 @@ class Model(object):
         return 
 
     def metrics(self, predictions, label):
-        predictions = L.argmax(predictions, axis=1)
-        predictions = L.unsqueeze(predictions, axes=[1])
-        acc = atarashi.metrics.Acc(label, predictions)
-        auc = atarashi.metrics.Auc(label, predictions)
+        log.debug(label)
+        auc = atarashi.metrics.Auc(label, L.sigmoid(predictions))
+        acc = atarashi.metrics.Acc(label, L.unsqueeze(L.argmax(predictions, axis=1), axes=[1]))
         return {'acc': acc, 'auc': auc}
 
 
@@ -133,17 +129,20 @@ if __name__ == '__main__':
         ])
 
     def before_batch(a, b, c):
-        a = np.unique(a)[:args.max_seqlen]
-        b = np.unique(b)[:args.max_seqlen]
+        a = a[:args.max_seqlen]
+        b = b[:args.max_seqlen]
         return a, b, c
 
 
     def after_batch(a, b, c):
         a = np.expand_dims(a, axis=-1)
         b = np.expand_dims(b, axis=-1)
-        c = np.expand_dims(c, axis=-1).astype(np.float32)
+        c = np.expand_dims(c, axis=-1)
+        #if random() < 0.1:
+        #    log.debug(a)
+        #    log.debug(b)
+        #    log.debug(c)
         return a, b, c
-
 
     train_ds = feature_column.build_dataset(data_dir=args.train_data_dir, shuffle=True, repeat=True) \
                                    .map(before_batch) \

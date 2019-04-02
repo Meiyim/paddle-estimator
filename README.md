@@ -1,6 +1,4 @@
 # ATARSHI for paddle
-> 中国人自己的Estimator!
-
 1. 分布式训练管理(Summary/ Metrics/ Tensorboard 以及其他你喜欢的高级轮子)
 2. data pipeline (依靠`paddle pyreader`, 提供灵活的Dataset API供用户组件自定义数据流)
 3. 数据管理（tokenization, 二进制化...)
@@ -101,14 +99,8 @@
 
 ## TODO
 1. dataset output_types/ output_shapes 自动推断
-2. 自动超参数搜索~
+2. 自动超参数搜索
 3. 分布式同步/ 异步自动化并行
-4. warm_start
-5. ...
-
-
-> CHENXUYI
->
-> chenxuyi@baidu.com
+4. ...
 
 
