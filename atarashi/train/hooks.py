@@ -132,6 +132,7 @@ class EvalHook(RunHook):
         self.board_log_dir = board_log_dir
         self.train_state = None
         self.writer = None
+        self._result = None
         if len(metrics):
             self.names, self.metrics = zip(*metrics.items())
         else:
@@ -159,10 +160,16 @@ class EvalHook(RunHook):
         for r, m in zip(res, self.metrics):
             m.update(r)
 
+    @property
+    def result(self):
+        return self._result
+
     def after_train(self):
         printable = []
+        self._result = {}
         for n, m in zip(self.names, self.metrics):
             val = m.eval()
+            self._result[n] = val
             assert val.shape == (), 'metrics eval use float'
             printable.append('{}\t{}'.format(n, val))
             self.writer.add_scalar(n, val, self.train_state.gstep)

@@ -53,7 +53,7 @@ def get_parallel_exe(program, loss, dev_count):
     return train_exe
 
 
-def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, warm_start_setting=None):
+def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, warm_start_setting=None, train_hooks=[], eval_hooks=[], exporters=[]):
     train_program = F.Program()
     startup_prog = F.Program()
     with F.program_guard(train_program, startup_prog):
@@ -95,10 +95,10 @@ def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, 
 
                 eval_model = Model(params, RunMode.EVAL)
                 eval_pred = eval_model.forward(features)
-                eval_loss = eval_model.loss(eval_pred, label)
+                #eval_loss = eval_model.loss(eval_pred, label)
                 eval_metrics = eval_model.metrics(eval_pred, label)
-                assert 'loss' not in eval_metrics
-                eval_metrics['loss'] = metrics.Mean(eval_loss)
+                #assert 'loss' not in eval_metrics
+                #eval_metrics['loss'] = metrics.Mean(eval_loss)
 
     dev_count = F.core.get_cuda_device_count()
     #param broadcast happened when creating ParallelProgram, init before this
@@ -148,6 +148,7 @@ def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, 
                     skip_step=run_config.skip_steps),
                 hooks.StopAtStepHook(run_config.max_steps, run_config.run_steps),
             ]
+        train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
         eval_hook = hooks.EvalHook(eval_metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
 
@@ -167,18 +168,24 @@ def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, 
                     train_exe.state.gstep > run_config.skip_steps:
                     try: #[try -> with -> while]
                         eval_hook.set_train_state(train_exe.state)
+                        eval_run_hooks = [eval_hook]
+                        eval_run_hooks.extend(eval_hooks)
                         with bind_pyreader(eval_pyreader, eval_dataset), \
                             MonitoredExecutor(start_exe,
                                program=eval_program,
                                run_config=None,
                                dev_count=1, # single card eval
-                               run_hooks=[eval_hook],
+                               run_hooks=eval_run_hooks,
                             ) as eval_exe:
                             while True:
                                 eval_exe.run()
                                 #log.debug('eval')
                     except (F.core.EOFException, StopException):
                         pass
+                    eval_result = eval_hook.result
+                    for exporter in exporters:
+                        pass
+                        #exporter.export(start_exe, train_program, eval_result, train_exe.state, [f.name for f in features], [eval_pred])
                     log.debug('eval done')
     except (F.core.EOFException, StopException):
         pass

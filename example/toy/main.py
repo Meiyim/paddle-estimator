@@ -26,6 +26,7 @@ import jieba
 
 import atarashi
 import atarashi.data
+from atarashi.train import exporter
 from atarashi import log
 
 # 你可以使用任何你喜欢的paddle框架，来构建网络. 比如PARL
@@ -162,5 +163,6 @@ if __name__ == '__main__':
     eval_ds.output_shapes = shapes
     eval_ds.output_types = types
 
-    atarashi.train_and_eval(Model, hparams, run_config, train_ds, eval_ds)
+    best_exporter = exporter.BestExporter('./exported', 'auc')
+    atarashi.train_and_eval(Model, hparams, run_config, train_ds, eval_ds, exporters=[best_exporter])
 
