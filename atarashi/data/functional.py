@@ -21,9 +21,10 @@ import numpy as np
 
 import gzip
 import struct
-
 import functools
 
+import paddle.fluid  as F
+import paddle.fluid.layers  as L
 from atarashi.util import map_structure
 from atarashi import log
 
@@ -46,7 +47,7 @@ def open_gz(filename):
 def shuffle_func(dataset, buffer_size):
     buf = []
     def gen():
-        iterable = dataset()
+        iterable = iter(dataset)
         while True:
             buf = list(itertools.islice(iterable, buffer_size)) #cache this iterator
             if len(buf):
@@ -78,7 +79,7 @@ def interleave_func(iterable, map_fn, cycle_length, block_length):
 def repeat_func(dataset, n):
     def gen():
         cnt = 0
-        iterable = dataset()
+        iterable = iter(dataset)
         while True:
             for item in iterable:
                 yield item
@@ -86,7 +87,7 @@ def repeat_func(dataset, n):
             if cnt == n:
                 break
             else: 
-                iterable = dataset()
+                iterable = iter(dataset)
     return Dataset.from_generator(gen)
 
 
@@ -111,7 +112,8 @@ def padded_batch_func(dataset, batch_size, pad_value):
             padded = []
             assert len(buf) == len(pad_value), 'pad_value [%d] != element size[%d]' % (len(buf), len(pad_value))
             for e, pv in zip(buf, pad_value):
-                if e[0].shape != (): #pad to max len
+                elem = e[0]
+                if not np.isscalar(elem):
                     max_len = max(map(len, e))
                     e = map(lambda i: np.pad(i, [0, max_len - len(i)], 'constant', constant_values=pv), e)
                 padded.append(np.stack(e))
@@ -149,26 +151,49 @@ class Dataset(object):
         return ret
 
     def __init__(self):
+        self.name = None
         self.data_shapes = None
         self.data_types = None
         self.generator = None
+        self.pyreader = None
 
     def __iter__(self):
         return self.generator()
 
-    def __call__(self):
-        return self.generator()
+    #def __call__(self):
+    #    return self.generator()
+
+    def features(self):
+        '''start point of net building. call this in a program scope'''
+        assert self.name is not None, 'unnamed Dataset'
+        self.pyreader = L.py_reader(
+                50,
+                shapes=self.data_shapes,
+                dtypes=self.data_types,
+                lod_levels=[0] * len(self.data_shapes),
+                name=self.name,
+                use_double_buffer=True,
+        )
+        features = L.read_file(self.pyreader)
+        return features
+
+
+    def start(self):
+        assert self.pyreader is not None, 'use Dataset.features to build net first, then start dataset'
+        return PyreaderContext(self.pyreader, self.generator)
 
     def apply(self, transform_func):
         #input_shapes = transform_func.input_shapes
         #input_types = transform_func.input_types
-        #output_shapes = transform_func.output_shapes
-        #output_types = transform_func.output_types
+        #data_shapes = transform_func.data_shapes
+        #data_types = transform_func.data_types
         #assert input_shapes == self.data_shapes
         #assert input_types = self.data_types
         ret = transform_func(self)
-        #ret.data_shapes = output_shapes
-        #ret.data_types = output_types
+        if self.name is not None:
+            ret.name = self.name
+        #ret.data_shapes = data_shapes
+        #ret.data_types = data_types
         return ret
 
     def shuffle(self, buffer_size):
@@ -186,5 +211,18 @@ class Dataset(object):
     def padded_batch(self, batch_size, pad_value):
         func = functools.partial(padded_batch_func, batch_size=batch_size, pad_value=pad_value)
         return self.apply(func)
+
+
+class PyreaderContext(object):
+    def __init__(self, pyreader, dataset): 
+        pyreader.decorate_tensor_provider(dataset)
+        self._pyreader = pyreader
+
+    def __enter__(self):
+        self._pyreader.start()
+        return self
+    
+    def __exit__(self, err_type, err_value, trace):
+        self._pyreader.reset()
 
 

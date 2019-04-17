@@ -59,6 +59,11 @@ class Mean(Metrics):
         return self.saver.mean()
 
 
+class Ppl(Mean):
+    def eval(self):
+        return np.exp(self.saver.mean())
+
+
 class Acc(Mean):
     def __init__(self, label, pred):
         self.eq = L.equal(pred, label)

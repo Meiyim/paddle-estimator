@@ -39,6 +39,14 @@ RunConfig = namedtuple('RunConfig', [
     'shit'])
 RunConfig.__new__.__defaults__ = (None,) * len(RunConfig._fields)
 
+ModelSpec = namedtuple('ModelSpec', [
+    'loss',
+    'predictions',
+    'metrics',
+    'mode',
+    ])
+ModelSpec.__new__.__defaults__ = (None,) * len(ModelSpec._fields)
+
 
 class StopException(Exception):
     pass

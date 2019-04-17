@@ -17,9 +17,10 @@ import logging
 import os
 import itertools
 import json
+import abc
 import numpy as np
 
-class Model(object):
+class Model(abc.ABC):
     def __init__(self, config, mode):
         """
         Args:
@@ -28,6 +29,7 @@ class Model(object):
         """
         self.mode = mode
 
+    @abc.abstractmethod
     def forward(self, features):
         """
         Args:
@@ -38,6 +40,7 @@ class Model(object):
         pass
 
 
+    @abc.abstractmethod
     def loss(self, predictions, label):
         """
         Args:
@@ -51,6 +54,7 @@ class Model(object):
         pass
 
 
+    @abc.abstractmethod
     def backward(self, loss):
         """
         Call in TRAIN mode
@@ -62,6 +66,7 @@ class Model(object):
         pass
 
         
+    @abc.abstractmethod
     def metrics(self, predictions, label):
         """
         Call in EVAL mode

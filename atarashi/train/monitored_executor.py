@@ -27,7 +27,7 @@ from atarashi import log
 from atarashi.types import StopException
 
 
-__all__ = ['MonitoredExecutor', 'bind_pyreader', 'Saver']
+__all__ = ['MonitoredExecutor', 'Saver']
 
 
 class RunState(object):
@@ -68,17 +68,6 @@ class RunState(object):
         return ret
 
 
-class bind_pyreader(object):
-    def __init__(self, pyreader, dataset): 
-        pyreader.decorate_tensor_provider(dataset)
-        self._pyreader = pyreader
-
-    def __enter__(self):
-        self._pyreader.start()
-        return self
-    
-    def __exit__(self, err_type, err_value, trace):
-        self._pyreader.reset()
 
 
 class Saver(object):

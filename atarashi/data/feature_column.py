@@ -223,12 +223,14 @@ class FeatureColumns(object):
             dataset = dataset.map(map_func_after_batch)
         return dataset
 
-    def build_dataset(self, data_dir=None, gz_dir=None, **kwargs):
+    def build_dataset(self, name, data_dir=None, gz_dir=None, **kwargs):
         if self._use_gz:
             gz_dir = self._make_gz_dataset(data_dir, gz_dir)
             ds = self._read_gz_dataset(gz_dir, **kwargs)
+            ds.name = name
         else:
             ds = self._read_txt_dataset(**kwargs)
+            ds.name = name
         return ds
 
 

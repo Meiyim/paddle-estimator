@@ -26,13 +26,13 @@ import jieba
 
 import atarashi
 import atarashi.data
-from atarashi.train import exporter
+from atarashi.train import exporter, Model
 from atarashi import log
 
 # 你可以使用任何你喜欢的paddle框架，来构建网络. 比如PARL
 #import parl.layers  as L
 
-class Model(object):
+class ToyModel(Model):
     """
         model只需要定义
         `__init__`, `forward`, `loss`, `metrics`, `backward`
@@ -145,12 +145,12 @@ if __name__ == '__main__':
         #    log.debug(c)
         return a, b, c
 
-    train_ds = feature_column.build_dataset(data_dir=args.train_data_dir, shuffle=True, repeat=True) \
+    train_ds = feature_column.build_dataset('train', data_dir=args.train_data_dir, shuffle=True, repeat=True) \
                                    .map(before_batch) \
                                    .padded_batch(run_config.batch_size, (0, 0, 0)) \
                                    .map(after_batch) 
 
-    eval_ds = feature_column.build_dataset(data_dir=args.eval_data_dir, shuffle=False, repeat=False) \
+    eval_ds = feature_column.build_dataset('eval', data_dir=args.eval_data_dir, shuffle=False, repeat=False) \
                                    .map(before_batch) \
                                    .padded_batch(run_config.batch_size, (0, 0, 0)) \
                                    .map(after_batch) 
@@ -164,5 +164,5 @@ if __name__ == '__main__':
     eval_ds.output_types = types
 
     best_exporter = exporter.BestExporter('./exported', 'auc')
-    atarashi.train_and_eval(Model, hparams, run_config, train_ds, eval_ds, exporters=[best_exporter])
+    atarashi.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds, exporters=[best_exporter])
 

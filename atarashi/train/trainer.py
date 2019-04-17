@@ -14,6 +14,7 @@
 
 import os
 import itertools
+import inspect
 from contextlib import contextmanager
 
 import paddle.fluid  as F
@@ -22,18 +23,19 @@ import paddle.fluid.layers  as L
 import atarashi
 import atarashi.collection
 from atarashi.types import RunMode, StopException, SummaryRecord
-from atarashi.train import hooks, MonitoredExecutor, bind_pyreader
+import atarashi.train
 from atarashi import metrics
 from atarashi import summary
+from atarashi.train import hooks, MonitoredExecutor
 
 from atarashi import log
 
 __all__ = ['train_and_eval'] 
 
+
 def get_parallel_exe(program, loss, dev_count):
     nccl2_num_trainers = 1
     nccl2_trainer_id = 0
-
 
     exec_strategy = F.ExecutionStrategy()
     exec_strategy.num_threads = dev_count
@@ -53,27 +55,37 @@ def get_parallel_exe(program, loss, dev_count):
     return train_exe
 
 
-def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, warm_start_setting=None, train_hooks=[], eval_hooks=[], exporters=[]):
+def build_net(model_fn_or_model, dataset, mode, params, run_config):
+    if isinstance(model_fn_or_model, atarashi.train.Model):
+        def model_fn(features, mode, params, run_config):
+            fea, label = features[: -1], features[-1]
+            model = model_fn_or_model(params, mode, params, run_config=run_config)
+            pred = model.forward(fea)
+            loss = model.loss(pred, label)
+            model.backward(loss)
+    elif inspect.isfunction(model_fn_or_model):
+        model_fn = model_fn_or_model
+    else:
+        raise ValueError('unknown model %s' % model_fn_or_model)
+
+    fea = dataset.features()
+    model_spec = model_fn(features=fea, mode=mode, params=params, run_config=run_config)
+    if mode is RunMode.TRAIN or mode is RunMode.EVAL:
+        assert model_spec.loss is not None
+    elif mode is RunMode.PREDICT:
+        assert model_spec.predictions is not None
+    else:
+        raise ValueError('unkonw mode %s' % mode)
+    return model_spec
+
+
+def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, eval_dataset=None, warm_start_setting=None, train_hooks=[], eval_hooks=[], exporters=[]):
     train_program = F.Program()
     startup_prog = F.Program()
     with F.program_guard(train_program, startup_prog):
         with F.unique_name.guard():
             with atarashi.collection.Collections() as collections:
-                pyreader = L.py_reader(
-                        50,
-                        shapes=train_dataset.output_shapes,
-                        dtypes=train_dataset.output_types,
-                        lod_levels=[0] * len(eval_dataset.output_shapes),
-                        name='train',
-                        use_double_buffer=True,
-                )
-                features = L.read_file(pyreader)
-                label = features[-1]
-                features = features[: -1]
-                model = Model(params, RunMode.TRAIN)
-                pred = model.forward(features)
-                loss = model.loss(pred, label)
-                model.backward(loss)
+                model_spec = build_net(model_class_or_model_fn, train_dataset, RunMode.TRAIN, params, run_config)
 
     if eval_dataset is not None:
         eval_program = F.Program()
@@ -81,24 +93,7 @@ def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, 
         with F.program_guard(eval_program, eval_startup_program):
             #share var with Train net
             with F.unique_name.guard():
-                eval_pyreader = L.py_reader(
-                    50,
-                    shapes=eval_dataset.output_shapes,
-                    dtypes=eval_dataset.output_types,
-                    lod_levels=[0] * len(eval_dataset.output_shapes),
-                    name='eval',
-                    use_double_buffer=True,
-                )
-                features = L.read_file(eval_pyreader)
-                label = features[-1]
-                features = features[: -1]
-
-                eval_model = Model(params, RunMode.EVAL)
-                eval_pred = eval_model.forward(features)
-                #eval_loss = eval_model.loss(eval_pred, label)
-                eval_metrics = eval_model.metrics(eval_pred, label)
-                #assert 'loss' not in eval_metrics
-                #eval_metrics['loss'] = metrics.Mean(eval_loss)
+                eval_model_spec = build_net(model_class_or_model_fn, eval_dataset, RunMode.EVAL, params, run_config)
 
     dev_count = F.core.get_cuda_device_count()
     #param broadcast happened when creating ParallelProgram, init before this
@@ -128,7 +123,7 @@ def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, 
         train_init_state = None
 
     #3.create paralle executor(broadcast variable)
-    train_exe = get_parallel_exe(train_program, loss, dev_count)
+    train_exe = get_parallel_exe(train_program, model_spec.loss, dev_count)
 
     log.info('Device count %d' % F.core.get_cuda_device_count())
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
@@ -142,7 +137,7 @@ def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, 
 
         train_run_hooks = [
                 hooks.CheckpointSaverHook(saver, per_step=run_config.save_steps, skip_step=run_config.skip_steps),
-                hooks.LoggingHook(loss, board_log_dir=os.path.join(run_config.model_dir, 'train_history'), 
+                hooks.LoggingHook(model_spec.loss, board_log_dir=os.path.join(run_config.model_dir, 'train_history'), 
                     summary_record=summary_record,
                     per_step=run_config.log_steps, 
                     skip_step=run_config.skip_steps),
@@ -150,9 +145,9 @@ def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, 
             ]
         train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
-        eval_hook = hooks.EvalHook(eval_metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
+        eval_hook = hooks.EvalHook(eval_model_spec.metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
 
-        with bind_pyreader(pyreader, train_dataset), \
+        with train_dataset.start(), \
             MonitoredExecutor(train_exe, 
                train_program,
                state=train_init_state,
@@ -170,7 +165,7 @@ def train_and_eval(Model, params, run_config, train_dataset, eval_dataset=None, 
                         eval_hook.set_train_state(train_exe.state)
                         eval_run_hooks = [eval_hook]
                         eval_run_hooks.extend(eval_hooks)
-                        with bind_pyreader(eval_pyreader, eval_dataset), \
+                        with eval_dataset.start(), \
                             MonitoredExecutor(start_exe,
                                program=eval_program,
                                run_config=None,
