@@ -36,6 +36,7 @@ RunConfig = namedtuple('RunConfig', [
     'skip_steps', 
     'log_steps',
     'run_steps',
+    'max_ckpt',
     'shit'])
 RunConfig.__new__.__defaults__ = (None,) * len(RunConfig._fields)
 

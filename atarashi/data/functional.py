@@ -113,7 +113,7 @@ def padded_batch_func(dataset, batch_size, pad_value):
             assert len(buf) == len(pad_value), 'pad_value [%d] != element size[%d]' % (len(buf), len(pad_value))
             for e, pv in zip(buf, pad_value):
                 elem = e[0]
-                if not np.isscalar(elem):
+                if (not np.isscalar(elem)) and elem.shape != ():
                     max_len = max(map(len, e))
                     e = map(lambda i: np.pad(i, [0, max_len - len(i)], 'constant', constant_values=pv), e)
                 padded.append(np.stack(e))

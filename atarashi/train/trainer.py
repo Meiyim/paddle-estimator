@@ -56,13 +56,22 @@ def get_parallel_exe(program, loss, dev_count):
 
 
 def build_net(model_fn_or_model, dataset, mode, params, run_config):
-    if isinstance(model_fn_or_model, atarashi.train.Model):
+    if issubclass(model_fn_or_model, atarashi.train.Model):
         def model_fn(features, mode, params, run_config):
             fea, label = features[: -1], features[-1]
-            model = model_fn_or_model(params, mode, params, run_config=run_config)
+            model = model_fn_or_model(params, mode, run_config=run_config)
             pred = model.forward(fea)
-            loss = model.loss(pred, label)
-            model.backward(loss)
+            if mode == atarashi.RunMode.TRAIN:
+                loss = model.loss(pred, label)
+                model.backward(loss)
+                return atarashi.ModelSpec(loss=loss, predictions=pred)
+            elif mode == atarashi.RunMode.EVAL:
+                metrics = model.metrics(pred, label)
+                return atarashi.ModelSpec(predictions=pred, metrics=metrics)
+            elif mode == atarashi.RunMode.PREDICT:
+                return atarashi.ModelSpec(predictions=pred)
+            else:
+                raise RuntimeError('unknown run mode %s' % mode)
     elif inspect.isfunction(model_fn_or_model):
         model_fn = model_fn_or_model
     else:
@@ -70,9 +79,12 @@ def build_net(model_fn_or_model, dataset, mode, params, run_config):
 
     fea = dataset.features()
     model_spec = model_fn(features=fea, mode=mode, params=params, run_config=run_config)
-    if mode is RunMode.TRAIN or mode is RunMode.EVAL:
+    log.debug(model_spec)
+    if mode == RunMode.TRAIN:
         assert model_spec.loss is not None
-    elif mode is RunMode.PREDICT:
+    elif mode == RunMode.EVAL:
+        assert model_spec.metrics is not None
+    elif mode == RunMode.PREDICT:
         assert model_spec.predictions is not None
     else:
         raise ValueError('unkonw mode %s' % mode)
@@ -116,7 +128,7 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
         else:
             raise NotImplementedError()
 
-    saver = atarashi.train.Saver(run_config.model_dir, start_exe, program=train_program)
+    saver = atarashi.train.Saver(run_config.model_dir, start_exe, program=train_program, max_ckpt_to_keep=run_config.max_ckpt)
     if saver.last_ckpt is not None:
         train_init_state = saver.restore()
     else:

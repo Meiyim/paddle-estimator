@@ -100,6 +100,18 @@ class Auc(Metrics):
         auc = sklearn.metrics.auc(fpr, tpr)
         return auc
 
+class PrecisionAtThreshold(Auc):
+    def __init__(self, label, pred, threshold=0.5):
+        super().__init__(label, pred)
+        self.threshold = threshold 
+
+    def eval(self):
+        infered = self.pred_saver > self.threshold
+        correct_num = np.array(infered & self.label_saver).sum()
+        infer_num = infered.sum()
+        return correct_num / (infer_num + 1.e-6)
+
+
 #class SemanticRecallMetrics(Metrics):
 #    def __init__(self, qid, vec, type_id):
 #        self.qid = qid

@@ -71,14 +71,14 @@ class RunState(object):
 
 
 class Saver(object):
-    def __init__(self, save_dir, exe, program, save_prefix='model', max_ckpt_to_keep=10,):
+    def __init__(self, save_dir, exe, program, save_prefix='model', max_ckpt_to_keep=None):
         if exe is not None:
             assert isinstance(exe, F.Executor), 'expect normal executor to save, got executor of type %s' % repr(type(exe))
         self._exe = exe
         self._program = program
         self._save_dir = save_dir
         self._save_prefix = save_prefix
-        self._max_ckpt_to_keep = max_ckpt_to_keep
+        self._max_ckpt_to_keep = 10 if max_ckpt_to_keep is None else max_ckpt_to_keep
 
         self.ckpt_info_path = os.path.join(save_dir, 'ckpt_info')
 
@@ -159,8 +159,8 @@ class MonitoredExecutor(object):
             fetch_list_len = map(len, fetch_list)
 
             fetch_list, schema = util.flatten(fetch_list)
-            if len(set(fetch_list)) != len(fetch_list):
-                log.error('strange shit happend when fetch list has idetity tensors %s' % fetch_list)
+            #if len(set(fetch_list)) != len(fetch_list):
+            #    log.error('strange shit happend when fetch list has idetity tensors %s' % fetch_list)
 
             #log.debug(fetch_list)
             if isinstance(self._exe, F.ParallelExecutor):
