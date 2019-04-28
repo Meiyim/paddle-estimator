@@ -163,6 +163,15 @@ class Dataset(object):
     #def __call__(self):
     #    return self.generator()
 
+    def placeholders(self):
+        if self.data_shapes is None or self.data_types is None:
+            raise ValueError('try making placeholder from a shape/types undefined dataset')
+        ret = []
+        for i, (shape, types) in enumerate(zip(self.data_shapes, self.data_types)):
+            ret.append(L.data(str(i), shape=shape, append_batch_size=False, dtype=types))
+        return ret
+
+
     def features(self):
         '''start point of net building. call this in a program scope'''
         assert self.name is not None, 'unnamed Dataset'

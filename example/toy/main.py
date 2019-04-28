@@ -39,7 +39,7 @@ class ToyModel(Model):
         让model跟写八股文一样
     """
 
-    def __init__(self, config, mode):
+    def __init__(self, config, mode, run_config):
         for k, v in config.items():
             log.info("%s: %s" % (k, repr(v)))
         self.hidden_size = config['hidden_size']
@@ -158,11 +158,11 @@ if __name__ == '__main__':
     shapes = ([-1, args.max_seqlen, 1], [-1, args.max_seqlen, 1], [-1, 1]) 
     types = ('int64', 'int64', 'int64')
 
-    train_ds.output_shapes = shapes
-    train_ds.output_types = types
-    eval_ds.output_shapes = shapes
-    eval_ds.output_types = types
+    train_ds.data_shapes = shapes
+    train_ds.data_types = types
+    eval_ds.data_shapes = shapes
+    eval_ds.data_types = types
+
 
     best_exporter = exporter.BestExporter('./exported', 'auc')
     atarashi.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds, exporters=[best_exporter])
-

@@ -68,8 +68,6 @@ class RunState(object):
         return ret
 
 
-
-
 class Saver(object):
     def __init__(self, save_dir, exe, program, save_prefix='model', max_ckpt_to_keep=None):
         if exe is not None:

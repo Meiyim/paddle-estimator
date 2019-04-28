@@ -21,6 +21,7 @@ import paddle.fluid  as F
 import paddle.fluid.layers  as L
 
 from atarashi import log
+from atarashi.train  import Saver
 
 class Exporter(object):
     def export(self, exe, program, eval_result, state):
@@ -36,16 +37,17 @@ class BestExporter(Exporter):
         else:
             self.cmp_fn = lambda old, new: old[key] > new[key]
 
-    def export(self, exe, program, eval_result, state, feeded_var_names, target_vars):
+
+    def export(self, exe, program, eval_result, state):
         if self._best is None:
             self._best = eval_result
             log.debug('[Best Exporter]: skip step %d' % state.gstep)
             return
         if self.cmp_fn(self._best, eval_result) :
             log.debug('[Best Exporter]: export to %s' % self._export_dir)
-            log.debug(target_vars)
-            log.debug(feeded_var_names)
-            F.io.save_inference_model(dirname=self._export_dir, feeded_var_names=feeded_var_names, target_vars=target_vars, executor=exe)
+            saver = Saver(self._export_dir, exe, program=program, max_ckpt_to_keep=1)
+            saver.save(state)
+
             self._best = eval_result
         else:
             log.debug('[Best Exporter]: skip step %s' % state.gstep)

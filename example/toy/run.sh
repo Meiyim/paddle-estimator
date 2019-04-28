@@ -14,7 +14,7 @@ ${python} ./toy/main.py \
     --max_seqlen 128 \
     --run_config '{
         "batch_size": 32,
-        "model_dir": "./models/toy_9",
+        "model_dir": "./models/toy_10",
         "max_steps": 60000,
         "save_steps": 1000000,
         "log_steps": 10,

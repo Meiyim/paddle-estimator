@@ -55,7 +55,7 @@ def get_parallel_exe(program, loss, dev_count):
     return train_exe
 
 
-def build_net(model_fn_or_model, dataset, mode, params, run_config):
+def build_net(model_fn_or_model, features, mode, params, run_config):
     if issubclass(model_fn_or_model, atarashi.train.Model):
         def model_fn(features, mode, params, run_config):
             fea, label = features[: -1], features[-1]
@@ -77,8 +77,7 @@ def build_net(model_fn_or_model, dataset, mode, params, run_config):
     else:
         raise ValueError('unknown model %s' % model_fn_or_model)
 
-    fea = dataset.features()
-    model_spec = model_fn(features=fea, mode=mode, params=params, run_config=run_config)
+    model_spec = model_fn(features=features, mode=mode, params=params, run_config=run_config)
     log.debug(model_spec)
     if mode == RunMode.TRAIN:
         assert model_spec.loss is not None
@@ -97,7 +96,8 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
     with F.program_guard(train_program, startup_prog):
         with F.unique_name.guard():
             with atarashi.collection.Collections() as collections:
-                model_spec = build_net(model_class_or_model_fn, train_dataset, RunMode.TRAIN, params, run_config)
+                fea = train_dataset.features()
+                model_spec = build_net(model_class_or_model_fn, fea, RunMode.TRAIN, params, run_config)
 
     if eval_dataset is not None:
         eval_program = F.Program()
@@ -105,7 +105,8 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
         with F.program_guard(eval_program, eval_startup_program):
             #share var with Train net
             with F.unique_name.guard():
-                eval_model_spec = build_net(model_class_or_model_fn, eval_dataset, RunMode.EVAL, params, run_config)
+                fea = eval_dataset.features()
+                eval_model_spec = build_net(model_class_or_model_fn, fea, RunMode.EVAL, params, run_config)
 
     dev_count = F.core.get_cuda_device_count()
     #param broadcast happened when creating ParallelProgram, init before this
@@ -191,8 +192,7 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
                         pass
                     eval_result = eval_hook.result
                     for exporter in exporters:
-                        pass
-                        #exporter.export(start_exe, train_program, eval_result, train_exe.state, [f.name for f in features], [eval_pred])
+                        exporter.export(start_exe, train_program, eval_result, train_exe.state)
                     log.debug('eval done')
     except (F.core.EOFException, StopException):
         pass
