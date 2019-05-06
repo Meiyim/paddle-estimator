@@ -162,9 +162,9 @@ class MonitoredExecutor(object):
 
             #log.debug(fetch_list)
             if isinstance(self._exe, F.ParallelExecutor):
-                res = self._exe.run(fetch_list=fetch_list)
+                res = self._exe.run(fetch_list=fetch_list, *args, **kwargs)
             else:
-                res = self._exe.run(self._program, fetch_list=fetch_list)
+                res = self._exe.run(self._program, fetch_list=fetch_list, *args, **kwargs)
             res = [self.merge_result(r) for r in res]
             #log.debug(res)
 

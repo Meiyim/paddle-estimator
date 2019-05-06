@@ -26,6 +26,7 @@ import jieba
 
 import atarashi
 import atarashi.data
+import atarashi.train
 from atarashi.train import exporter, Model
 from atarashi import log
 
@@ -102,7 +103,6 @@ class ToyModel(Model):
         return 
 
     def metrics(self, predictions, label):
-        log.debug(label)
         auc = atarashi.metrics.Auc(label, L.sigmoid(predictions))
         acc = atarashi.metrics.Acc(label, L.unsqueeze(L.argmax(predictions, axis=1), axes=[1]))
         return {'acc': acc, 'auc': auc}
@@ -139,11 +139,7 @@ if __name__ == '__main__':
         a = np.expand_dims(a, axis=-1)
         b = np.expand_dims(b, axis=-1)
         c = np.expand_dims(c, axis=-1)
-        #if random() < 0.1:
-        #    log.debug(a)
-        #    log.debug(b)
-        #    log.debug(c)
-        return a, b, c
+        return [a, b, c]
 
     train_ds = feature_column.build_dataset('train', data_dir=args.train_data_dir, shuffle=True, repeat=True) \
                                    .map(before_batch) \
@@ -155,7 +151,7 @@ if __name__ == '__main__':
                                    .padded_batch(run_config.batch_size, (0, 0, 0)) \
                                    .map(after_batch) 
 
-    shapes = ([-1, args.max_seqlen, 1], [-1, args.max_seqlen, 1], [-1, 1]) 
+    shapes = ([-1, -1, 1], [-1, -1, 1], [-1, 1]) 
     types = ('int64', 'int64', 'int64')
 
     train_ds.data_shapes = shapes
@@ -164,5 +160,5 @@ if __name__ == '__main__':
     eval_ds.data_types = types
 
 
-    best_exporter = exporter.BestExporter('./exported', 'auc')
-    atarashi.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds, exporters=[best_exporter])
+    atarashi.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds)
+
