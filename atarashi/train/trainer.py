@@ -30,7 +30,7 @@ from atarashi.train import hooks, MonitoredExecutor
 
 from atarashi import log
 
-__all__ = ['train_and_eval']
+__all__ = ['train_and_eval', 'predict']
 
 
 def get_parallel_exe(program, loss, dev_count):
@@ -58,9 +58,14 @@ def get_parallel_exe(program, loss, dev_count):
 def build_net(model_fn_or_model, features, mode, params, run_config):
     if issubclass(model_fn_or_model, atarashi.train.Model):
         def model_fn(features, mode, params, run_config):
-            fea, label = features[: -1], features[-1]
+            if mode != atarashi.RunMode.PREDICT:
+                fea, label = features[: -1], features[-1]
+            else:
+                fea = features
+
             model = model_fn_or_model(params, mode, run_config=run_config)
             pred = model.forward(fea)
+
             if mode == atarashi.RunMode.TRAIN:
                 loss = model.loss(pred, label)
                 model.backward(loss)
@@ -90,6 +95,36 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
     return model_spec
 
 
+def predict(model_class_or_model_fn, params, run_config, infer_dataset, split_batch=True):
+    program = F.Program()
+    startup_prog = F.Program()
+    with F.program_guard(program, startup_prog):
+        with F.unique_name.guard():
+            fea = infer_dataset.features()
+            model_spec = build_net(model_class_or_model_fn, fea, RunMode.PREDICT, params, run_config)
+    program = program.clone(for_test=True)
+
+    start_exe = F.Executor(F.CUDAPlace(0))
+    start_exe.run(startup_prog)
+
+    saver = atarashi.train.Saver(run_config.model_dir, start_exe, program=program, max_ckpt_to_keep=run_config.max_ckpt)
+    assert saver.last_ckpt is not None, 'checkpiont not found in %s' % run_config.model_dir
+    train_init_state = saver.restore()
+
+    pred = model_spec.predictions
+    if not isinstance(pred, list) or not isinstance(pred, tuple):
+        pred = [pred]
+
+    for infer_data in infer_dataset.start():
+        res = start_exe.run(program, feed=infer_data, fetch_list=pred)
+        if split_batch:
+            res = map(lambda i: i.tolist(), res)
+            res = zip(*res) # transpose
+            for r in res:
+                yield r
+        else:
+            yield res
+
 def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, eval_dataset=None, warm_start_setting=None, train_hooks=[], eval_hooks=[], exporters=[]):
     train_program = F.Program()
     startup_prog = F.Program()
@@ -107,6 +142,7 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
             with F.unique_name.guard():
                 fea = eval_dataset.features()
                 eval_model_spec = build_net(model_class_or_model_fn, fea, RunMode.EVAL, params, run_config)
+        eval_program = eval_program.clone(for_test=True)
 
     dev_count = F.core.get_cuda_device_count()
     #param broadcast happened when creating ParallelProgram, init before this

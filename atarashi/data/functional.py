@@ -44,6 +44,14 @@ def open_gz(filename):
     return gen
 
 
+def open_file(filename):
+    def gen():
+        with open(filename, 'rb') as f:
+            for line in f:
+                yield line
+    return gen
+
+
 def shuffle_func(dataset, buffer_size):
     buf = []
     def gen():
@@ -131,6 +139,15 @@ class Dataset(object):
         return ret
 
     @classmethod
+    def from_file(cls, filename):
+        gen = open_file(filename)
+        ret = Dataset()
+        ret.generator = gen
+        ret.data_shapes = []
+        ret.data_types = str
+        return ret
+
+    @classmethod
     def from_gz_file(cls, filename):
         gen = open_gz(filename)
         ret = Dataset()
@@ -158,7 +175,13 @@ class Dataset(object):
         self.placeholders = None
 
     def __iter__(self):
-        return self.generator()
+        def gen():
+            try:
+                for i in self.generator():
+                    yield i
+            except Exception as e:
+                log.exception(e)
+        return gen()
 
     #def __call__(self):
     #    return self.generator()

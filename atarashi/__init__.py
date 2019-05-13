@@ -29,7 +29,7 @@ console.setFormatter(formatter)
 log.setLevel(logging.DEBUG)
 log.propagate = False
 
-from atarashi.train import train_and_eval
+from atarashi.train import *
 from atarashi.types import *
 from atarashi.util import ArgumentParser, parse_hparam, parse_runconfig
 
