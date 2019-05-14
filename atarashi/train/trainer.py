@@ -33,26 +33,20 @@ from atarashi import log
 __all__ = ['train_and_eval', 'predict']
 
 
-def get_parallel_exe(program, loss, dev_count):
+def compile_program(program, loss, dev_count):
     nccl2_num_trainers = 1
     nccl2_trainer_id = 0
 
     exec_strategy = F.ExecutionStrategy()
-    exec_strategy.num_threads = dev_count
+    exec_strategy.num_threads = dev_count * 4
     exec_strategy.num_iteration_per_drop_scope = min(10, 1000) # important shit
 
     build_strategy = F.BuildStrategy()
     build_strategy.remove_unnecessary_lock = False
+    build_strategy.memory_optimize = True 
 
-    train_exe = F.ParallelExecutor(
-        use_cuda=True,
-        loss_name=loss.name,
-        build_strategy=build_strategy,
-        exec_strategy=exec_strategy,
-        main_program=program,
-        num_trainers=nccl2_num_trainers,
-        trainer_id=nccl2_trainer_id)
-    return train_exe
+    compiled_program = F.compiler.CompiledProgram(program).with_data_parallel(loss_name=loss.name, build_strategy=build_strategy, exec_strategy=exec_strategy)
+    return compiled_program
 
 
 def build_net(model_fn_or_model, features, mode, params, run_config):
@@ -173,7 +167,9 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
         train_init_state = None
 
     #3.create paralle executor(broadcast variable)
-    train_exe = get_parallel_exe(train_program, model_spec.loss, dev_count)
+    train_exe = F.Executor(F.CUDAPlace(0))
+    train_program = compile_program(train_program, model_spec.loss, dev_count)
+
 
     log.info('Device count %d' % F.core.get_cuda_device_count())
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
