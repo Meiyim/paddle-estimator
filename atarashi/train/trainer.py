@@ -149,7 +149,8 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
 
     #The order of this 3 steps really matters
     #1. init train
-    start_exe = F.Executor(F.CUDAPlace(0))
+    single_card_place = F.CUDAPlace(0)
+    start_exe = F.Executor(single_card_place)
     start_exe.run(startup_prog)
 
     #2. restore param
@@ -219,7 +220,7 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
                        dev_count=1, # single card eval
                        run_hooks=eval_run_hooks,
                     ) as eval_exe:
-                    for eval_data in eval_dataset.start():
+                    for eval_data in eval_dataset.start(places=[single_card_place]):
                         eval_exe.run(feed=eval_data)
                         #log.debug('eval')
 

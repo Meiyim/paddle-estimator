@@ -203,10 +203,11 @@ class Dataset(object):
         return ret
 
 
-    def start(self):
+    def start(self, places=F.cuda_places()):
         assert self.placeholders is not None, 'build net first'
         reader = F.io.PyReader(feed_list=self.features(), capacity=50, iterable=True)
-        reader.decorate_batch_generator(self.generator, places=F.cuda_places())
+        log.info('datapipeline starts in cuda places %s' % places)
+        reader.decorate_batch_generator(self.generator, places=places)
         return reader()
 
 
