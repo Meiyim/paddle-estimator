@@ -98,6 +98,9 @@ class LoggingHook(RunHook):
                 speed = (state.gstep - self.last_state.gstep) / (state.time - self.last_state.time)
             else:
                 speed = -1.
+
+            if speed > 0.:
+                self.writer.add_scalar('global_step', speed, state.gstep)
             self.last_state = state
             
             log.info('\t'.join([
