@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import sys
 import logging
@@ -206,7 +209,7 @@ class Dataset(object):
     def start(self, places=F.cuda_places()):
         assert self.placeholders is not None, 'build net first'
         reader = F.io.PyReader(feed_list=self.features(), capacity=50, iterable=True)
-        log.info('datapipeline starts in cuda places %s' % places)
+        log.info('data pipeline starts in cuda places %s' % places)
         reader.decorate_batch_generator(self.generator, places=places)
         return reader()
 

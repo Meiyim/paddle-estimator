@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import os
 import sys
@@ -188,6 +191,8 @@ class FeatureColumns(object):
         return gz_dir
 
     def _read_gz_dataset(self, gz_files, shuffle=False, repeat=True, **kwargs):
+        if len(gz_files) == 0:
+            raise ValueError('reading gz from empty file list: %s' % gz_files)
         log.info('reading gz from %s' % '\n'.join(gz_files))
         dataset = Dataset.from_iterable(gz_files)
         if repeat:
@@ -265,9 +270,11 @@ def _make_gz(args):
         if os.path.exists(to_file):
             return
         with open(from_file, 'rb') as fin, gzip.open(to_file, 'wb') as fout:
-            print('makeing gz %s => %s' % (from_file, to_file), file=sys.stderr)
-            for line in fin:
+            log.debug('making gz %s => %s' % (from_file, to_file))
+            for i, line in enumerate(fin):
                 line = line.strip(b'\n').split(sep)
+                #if i % 10000 == 0:
+                #    log.debug('making gz %s => %s [%d]' % (from_file, to_file, i))
                 if len(line) != len(columns):
                     log.error('columns not match at %s, got %d, expect %d' % (from_file, len(line), len(columns)))
                     continue
@@ -279,6 +286,7 @@ def _make_gz(args):
                 l = len(serialized)
                 data = struct.pack('i%ds' % l, l, serialized)
                 fout.write(data)
+            log.debug('done making gz %s => %s' % (from_file, to_file))
     except Exception as e:
         log.exception(e)
 

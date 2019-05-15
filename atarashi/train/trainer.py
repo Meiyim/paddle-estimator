@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import os
 import itertools
@@ -191,7 +194,8 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
 
     train_run_hooks.extend(train_hooks)
     #initialize here to avoid creating one event file per run
-    eval_hook = hooks.EvalHook(eval_model_spec.metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
+    if eval_dataset is not None:
+        eval_hook = hooks.EvalHook(eval_model_spec.metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
 
     with MonitoredExecutor(train_exe, 
            train_program,
@@ -203,7 +207,7 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
         for train_data in train_dataset.start():
             train_exe.run(feed=train_data) # train
             #start eval_loop
-            if eval_dataset and \
+            if eval_dataset is not None and \
                 train_exe.state.gstep % run_config.eval_steps == 0 and \
                 train_exe.state.gstep > run_config.skip_steps:
 

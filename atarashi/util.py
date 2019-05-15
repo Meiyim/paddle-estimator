@@ -11,8 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import os
+import six
 import re
 import json
 import argparse
@@ -82,7 +86,7 @@ def map_structure(func, s):
     if isinstance(s, list) or isinstance(s, tuple):
         return [map_structure(func, ss)for ss in s]
     elif isinstance(s, dict):
-        return {k: map_structure(func, v) for k, v in s.iteritems()}
+        return {k: map_structure(func, v) for k, v in six.iteritems(s)}
     else:
         return func(s)
 
