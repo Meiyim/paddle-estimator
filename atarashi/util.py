@@ -44,9 +44,7 @@ def _get_dict_from_environ_or_json_or_file(args, env_name):
             s = args
         if os.path.exists(s):
             s = open(s).read()
-        pat = re.compile(r'#.*$', re.M)
-        s = re.sub(pat, '', s)
-        r = json.loads(s)
+        r = eval(s)
         return r
     except json.decoder.JSONDecodeError as e:
         raise Exception('json parse error: %s \n got json: %s' % (repr(e), s))

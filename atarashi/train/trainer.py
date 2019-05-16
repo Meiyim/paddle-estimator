@@ -80,7 +80,6 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
         raise ValueError('unknown model %s' % model_fn_or_model)
 
     model_spec = model_fn(features=features, mode=mode, params=params, run_config=run_config)
-    log.debug(model_spec)
     if mode == RunMode.TRAIN:
         assert model_spec.loss is not None
     elif mode == RunMode.EVAL:
@@ -131,6 +130,8 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
                 fea = train_dataset.features()
                 model_spec = build_net(model_class_or_model_fn, fea, RunMode.TRAIN, params, run_config)
 
+    log.debug('Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n' % (repr(run_config), repr(params), repr(model_spec)))
+
     if eval_dataset is not None:
         eval_program = F.Program()
         eval_startup_program = startup_prog
@@ -140,6 +141,8 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
                 fea = eval_dataset.features()
                 eval_model_spec = build_net(model_class_or_model_fn, fea, RunMode.EVAL, params, run_config)
         eval_program = eval_program.clone(for_test=True)
+        log.debug('Eval with: \nEval_model_spec %s' % repr(eval_model_spec))
+
 
     dev_count = F.core.get_cuda_device_count()
     #param broadcast happened when creating ParallelProgram, init before this
