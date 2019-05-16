@@ -164,7 +164,10 @@ class MonitoredExecutor(object):
             #    log.error('strange shit happend when fetch list has idetity tensors %s' % fetch_list)
 
             #log.debug(fetch_list)
-            res = self._exe.run(self._program, fetch_list=fetch_list, *args, **kwargs)
+            if isinstance(self._exe, F.ParallelExecutor):
+                res = self._exe.run(fetch_list=fetch_list, *args, **kwargs)
+            else:
+                res = self._exe.run(self._program, fetch_list=fetch_list, *args, **kwargs)
             res = [self.merge_result(r) for r in res]
             #log.debug(res)
 
