@@ -92,10 +92,16 @@ class LoggingHook(RunHook):
                 h_np = res_list[1 + len(self.s_name): 1 + len(self.s_name) + len(self.h_name)]
 
                 for name, t in zip(self.s_name, s_np):
-                    self.writer.add_scalar(name, t, state.gstep)
+                    if np.isnan(t).any():
+                        log.warning('Nan summary: %s, skip' % name)
+                    else:
+                        self.writer.add_scalar(name, t, state.gstep)
 
                 for name, t in zip(self.h_name, h_np):
-                    self.writer.add_histogram(name, t, state.gstep)
+                    if np.isnan(t).any():
+                        log.warning('Nan summary: %s, skip' % name)
+                    else:
+                        self.writer.add_histogram(name, t, state.gstep)
 
             if self.last_state is not None:
                 speed = (state.gstep - self.last_state.gstep) / (state.time - self.last_state.time)

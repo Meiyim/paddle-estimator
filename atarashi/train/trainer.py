@@ -28,9 +28,9 @@ import atarashi.collection
 from atarashi.types import RunMode, StopException, SummaryRecord, StopException
 import atarashi.train
 import atarashi.util
+import atarashi.metrics
 from atarashi.train import distribution
 
-from atarashi import metrics
 from atarashi import summary
 from atarashi.train import hooks, MonitoredExecutor
 
@@ -76,8 +76,11 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
                 model.backward(loss)
                 return atarashi.ModelSpec(loss=loss, predictions=pred, mode=mode)
             elif mode == atarashi.RunMode.EVAL:
+                loss = model.loss(pred, label)
                 metrics = model.metrics(pred, label)
-                return atarashi.ModelSpec(predictions=pred, metrics=metrics, mode=mode)
+                if 'loss' not in metrics:
+                    metrics['loss'] = atarashi.metrics.Mean(loss)
+                return atarashi.ModelSpec(loss=loss, predictions=pred, metrics=metrics, mode=mode)
             elif mode == atarashi.RunMode.PREDICT:
                 return atarashi.ModelSpec(predictions=pred, mode=mode)
             else:
@@ -91,7 +94,7 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
     if mode == RunMode.TRAIN:
         assert model_spec.loss is not None
     elif mode == RunMode.EVAL:
-        assert model_spec.metrics is not None
+        assert model_spec.metrics is not None and model_spec.loss is not None
     elif mode == RunMode.PREDICT:
         assert model_spec.predictions is not None
     else:
