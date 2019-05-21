@@ -25,8 +25,11 @@ import paddle.fluid.layers  as L
 
 import atarashi
 import atarashi.collection
-from atarashi.types import RunMode, StopException, SummaryRecord
+from atarashi.types import RunMode, StopException, SummaryRecord, StopException
 import atarashi.train
+import atarashi.util
+from atarashi.train import distribution
+
 from atarashi import metrics
 from atarashi import summary
 from atarashi.train import hooks, MonitoredExecutor
@@ -37,9 +40,6 @@ __all__ = ['train_and_eval', 'predict']
 
 
 def get_parallel_exe(program, loss, dev_count):
-    nccl2_num_trainers = 1
-    nccl2_trainer_id = 0
-
     exec_strategy = F.ExecutionStrategy()
     exec_strategy.num_threads = dev_count
     exec_strategy.num_iteration_per_drop_scope = min(10, 1000) # important shit
@@ -47,14 +47,16 @@ def get_parallel_exe(program, loss, dev_count):
     build_strategy = F.BuildStrategy()
     build_strategy.remove_unnecessary_lock = False
 
+    log.debug(distribution.status.num_replica)
+    log.debug(distribution.status.replica_id)
     train_exe = F.ParallelExecutor(
         use_cuda=True,
         loss_name=loss.name,
         build_strategy=build_strategy,
         exec_strategy=exec_strategy,
         main_program=program,
-        num_trainers=nccl2_num_trainers,
-        trainer_id=nccl2_trainer_id)
+        num_trainers=distribution.status.num_replica,
+        trainer_id=distribution.status.replica_id)
     return train_exe
 
 
@@ -72,12 +74,12 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
             if mode == atarashi.RunMode.TRAIN:
                 loss = model.loss(pred, label)
                 model.backward(loss)
-                return atarashi.ModelSpec(loss=loss, predictions=pred)
+                return atarashi.ModelSpec(loss=loss, predictions=pred, mode=mode)
             elif mode == atarashi.RunMode.EVAL:
                 metrics = model.metrics(pred, label)
-                return atarashi.ModelSpec(predictions=pred, metrics=metrics)
+                return atarashi.ModelSpec(predictions=pred, metrics=metrics, mode=mode)
             elif mode == atarashi.RunMode.PREDICT:
-                return atarashi.ModelSpec(predictions=pred)
+                return atarashi.ModelSpec(predictions=pred, mode=mode)
             else:
                 raise RuntimeError('unknown run mode %s' % mode)
     elif inspect.isfunction(model_fn_or_model):
@@ -127,16 +129,22 @@ def predict(model_class_or_model_fn, params, run_config, infer_dataset, split_ba
         else:
             yield res
 
+
 def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, eval_dataset=None, warm_start_setting=None, train_hooks=[], eval_hooks=[], exporters=[]):
     train_program = F.Program()
     startup_prog = F.Program()
     with F.program_guard(train_program, startup_prog):
         with F.unique_name.guard():
             with atarashi.collection.Collections() as collections:
+                log.info('Building Train Graph')
                 fea = train_dataset.features()
                 model_spec = build_net(model_class_or_model_fn, fea, RunMode.TRAIN, params, run_config)
+                log.info('Done')
 
     log.debug('Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n' % (repr(run_config), repr(params), repr(model_spec)))
+
+    #init distribution env if envvir ATARASHI_DISCONFIG is set
+    distribution.init_distribuition_env(train_program, startup_prog)
 
     if eval_dataset is not None:
         eval_program = F.Program()
@@ -144,10 +152,12 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
         with F.program_guard(eval_program, eval_startup_program):
             #share var with Train net
             with F.unique_name.guard():
+                log.info('Building Eval Graph')
                 fea = eval_dataset.features()
                 eval_model_spec = build_net(model_class_or_model_fn, fea, RunMode.EVAL, params, run_config)
+                log.info('Done')
         eval_program = eval_program.clone(for_test=True)
-        log.debug('Eval with: \nEval_model_spec %s' % repr(eval_model_spec))
+        log.debug('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
 
 
     dev_count = F.core.get_cuda_device_count()
@@ -184,7 +194,6 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
     log.info('Device count %d' % F.core.get_cuda_device_count())
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
 
-
     summary_record = SummaryRecord(
             scalar=collections.get_from(summary.KEY_SUMMARY_SCALAR),
             histogram=collections.get_from(summary.KEY_SUMMARY_HISTOGRAM),
@@ -204,36 +213,44 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
     if eval_dataset is not None:
         eval_hook = hooks.EvalHook(eval_model_spec.metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
 
-    with MonitoredExecutor(train_exe, 
-           train_program,
-           state=train_init_state,
-           run_config=run_config,
-           dev_count=dev_count,
-           run_hooks=train_run_hooks,
-        ) as train_exe:
-        for train_data in train_dataset.start():
-            train_exe.run(feed=train_data) # train
-            #start eval_loop
-            if eval_dataset is not None and \
-                train_exe.state.gstep % run_config.eval_steps == 0 and \
-                train_exe.state.gstep > run_config.skip_steps:
+    #[try -> with -> for]
+    try:
+        with MonitoredExecutor(train_exe, 
+               train_program,
+               state=train_init_state,
+               run_config=run_config,
+               dev_count=dev_count,
+               run_hooks=train_run_hooks,
+            ) as train_exe:
+            for train_data in train_dataset.start():
+                train_exe.run(feed=train_data) # train
+                #start eval_loop
+                if eval_dataset is not None and \
+                    train_exe.state.gstep % run_config.eval_steps == 0 and \
+                    train_exe.state.gstep > run_config.skip_steps:
 
-                eval_hook.set_train_state(train_exe.state)
-                eval_run_hooks = [eval_hook]
-                eval_run_hooks.extend(eval_hooks)
-                with MonitoredExecutor(start_exe,
-                       program=eval_program,
-                       run_config=None,
-                       dev_count=1, # single card eval
-                       run_hooks=eval_run_hooks,
-                    ) as eval_exe:
-                    for eval_data in eval_dataset.start(places=[single_card_place]):
-                        eval_exe.run(feed=eval_data)
-                        #log.debug('eval')
+                    eval_hook.set_train_state(train_exe.state)
+                    eval_run_hooks = [eval_hook]
+                    eval_run_hooks.extend(eval_hooks)
+                    #[try -> with -> for]
+                    try:
+                        with MonitoredExecutor(start_exe,
+                                   program=eval_program,
+                                   run_config=None,
+                                   dev_count=1, # single card eval
+                                   run_hooks=eval_run_hooks,
+                                ) as eval_exe:
 
-                eval_result = eval_hook.result
-                for exporter in exporters:
-                    exporter.export(start_exe, train_program, eval_result, train_exe.state)
-                log.debug('eval done')
+                                for eval_data in eval_dataset.start(places=[single_card_place]):
+                                    eval_exe.run(feed=eval_data)
+                                    #log.debug('eval')
+                    except StopException as e:
+                        pass
+                    eval_result = eval_hook.result
+                    for exporter in exporters:
+                        exporter.export(start_exe, train_program, eval_result, train_exe.state)
+                        log.debug('eval done')
+    except StopException as e:
+        pass
 
 

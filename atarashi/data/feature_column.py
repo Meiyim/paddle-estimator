@@ -249,7 +249,7 @@ class FeatureColumns(object):
 
     def build_dataset(self, name, use_gz=True, data_dir=None, gz_dir=None, data_file=None, **kwargs):
         if use_gz:
-            gz_dir = self._make_gz_dataset(data_dir, data_dir, gz_dir)
+            gz_dir = self._make_gz_dataset(data_dir, gz_dir)
             gz_files = self.gz_files(gz_dir)
             ds = self._read_gz_dataset(gz_files, **kwargs)
         else:
@@ -289,5 +289,6 @@ def _make_gz(args):
             log.debug('done making gz %s => %s' % (from_file, to_file))
     except Exception as e:
         log.exception(e)
+        raise e
 
 

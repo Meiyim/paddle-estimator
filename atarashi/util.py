@@ -37,26 +37,33 @@ def ArgumentParser(name):
 
 
 def _get_dict_from_environ_or_json_or_file(args, env_name):
-    try:
-        if args is None:
-            s = os.environ.get('ATARASHI_RUNCONFIG')
-        else:
-            s = args
+    if args is None:
+        s = os.environ.get(env_name)
+    else:
+        s = args
         if os.path.exists(s):
             s = open(s).read()
-        r = eval(s)
+    if isinstance(s, six.string_types):
+        try:
+            r = eval(s)
+        except SyntaxError as e:
+            raise ValueError('json parse error: %s \n>Got json: %s' % (repr(e), s))
         return r
-    except json.decoder.JSONDecodeError as e:
-        raise Exception('json parse error: %s \n got json: %s' % (repr(e), s))
+    else:
+        return s #None
 
 
 def parse_runconfig(args=None):
     d = _get_dict_from_environ_or_json_or_file(args.run_config, 'ATARASHI_RUNCONFIG')
+    if d is None:
+        raise ValueError('run_config not found')
     return RunConfig(**d)
 
 
 def parse_hparam(args=None):
     d = _get_dict_from_environ_or_json_or_file(args.hparam, 'ATARASHI_RUNCONFIG')
+    if d is None:
+        raise ValueError('hparam not found')
     return d
 
 

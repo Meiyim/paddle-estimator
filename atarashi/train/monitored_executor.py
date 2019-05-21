@@ -27,6 +27,7 @@ import paddle.fluid.layers  as L
 
 from atarashi import util
 from atarashi import log
+from atarashi.train import distribution
 from atarashi.types import StopException
 
 
@@ -93,6 +94,7 @@ class Saver(object):
     def last_ckpt(self):
         return self.ckpt_list[-1] if len(self.ckpt_list) else None
 
+    @distribution.run_on_master
     def save(self, state):
         save_name = '%s_%d' % (self._save_prefix, state.gstep)
         save_dir = os.path.join(self._save_dir, save_name)
@@ -110,6 +112,7 @@ class Saver(object):
                 shutil.rmtree(os.path.join(self._save_dir, ckpt))
         open(self.ckpt_info_path, 'w').write('\n'.join(self.ckpt_list))
 
+    @distribution.run_on_master
     def restore(self, ckpt=-1):
         assert abs(ckpt) <= len(self.ckpt_list), 'invalid restore ckpt number %d' % ckpt
         path = os.path.join(self._save_dir, self.ckpt_list[ckpt])
