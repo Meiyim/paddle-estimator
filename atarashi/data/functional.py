@@ -175,7 +175,7 @@ class Dataset(object):
         self.data_shapes = None
         self.data_types = None
         self.generator = None
-        self.placeholders = None
+        self.pyreader = None
 
     def __iter__(self):
         def gen():
@@ -188,31 +188,34 @@ class Dataset(object):
 
     #def __call__(self):
     #    return self.generator()
-    @property
-    def feature_names(self):
-        return ['feature-%d' % i for i in range(len(self.data_types))]
 
-
-    def features(self):
+    def placeholders(self):
         if self.data_shapes is None or self.data_types is None:
             raise ValueError('try making placeholder from a shape/types undefined dataset')
-        if self.placeholders is not None:
-            return self.placeholders
-        else:
-            ret = []
-            for shape, types, name in zip(self.data_shapes, self.data_types, self.feature_names):
-                ret.append(L.data(name, shape=shape, append_batch_size=False, dtype=types))
-            self.placeholders = ret
+        ret = []
+        for i, (shape, types) in enumerate(zip(self.data_shapes, self.data_types)):
+            ret.append(L.data(str(i), shape=shape, append_batch_size=False, dtype=types))
         return ret
 
 
-    def start(self, places=F.cuda_places()):
-        assert self.placeholders is not None, 'build net first'
-        reader = F.io.PyReader(feed_list=self.features(), capacity=50, iterable=True)
-        log.info('data pipeline starts in cuda places %s' % places)
-        reader.decorate_batch_generator(self.generator, places=places)
-        return reader()
+    def features(self):
+        '''start point of net building. call this in a program scope'''
+        assert self.name is not None, 'unnamed Dataset'
+        self.pyreader = L.py_reader(
+                50,
+                shapes=self.data_shapes,
+                dtypes=self.data_types,
+                lod_levels=[0] * len(self.data_shapes),
+                name=self.name,
+                use_double_buffer=True,
+        )
+        features = L.read_file(self.pyreader)
+        return features
 
+
+    def start(self):
+        assert self.pyreader is not None, 'use Dataset.features to build net first, then start dataset'
+        return PyreaderContext(self.pyreader, self.generator)
 
     def apply(self, transform_func):
         #input_shapes = transform_func.input_shapes
@@ -243,5 +246,18 @@ class Dataset(object):
     def padded_batch(self, batch_size, pad_value):
         func = functools.partial(padded_batch_func, batch_size=batch_size, pad_value=pad_value)
         return self.apply(func)
+
+
+class PyreaderContext(object):
+    def __init__(self, pyreader, dataset): 
+        pyreader.decorate_tensor_provider(dataset)
+        self._pyreader = pyreader
+
+    def __enter__(self):
+        self._pyreader.start()
+        return self
+    
+    def __exit__(self, err_type, err_value, trace):
+        self._pyreader.reset()
 
 

@@ -197,63 +197,60 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
     log.info('Device count %d' % F.core.get_cuda_device_count())
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
 
-    summary_record = SummaryRecord(
-            scalar=collections.get_from(summary.KEY_SUMMARY_SCALAR),
-            histogram=collections.get_from(summary.KEY_SUMMARY_HISTOGRAM),
-        )
 
-    train_run_hooks = [
-            hooks.CheckpointSaverHook(saver, per_step=run_config.save_steps, skip_step=run_config.skip_steps),
-            hooks.LoggingHook(model_spec.loss, board_log_dir=os.path.join(run_config.model_dir, 'train_history'), 
-                summary_record=summary_record,
-                per_step=run_config.log_steps, 
-                skip_step=run_config.skip_steps),
-            hooks.StopAtStepHook(run_config.max_steps, run_config.run_steps),
-        ]
+    try: #[try -> with -> while]
+        summary_record = SummaryRecord(
+                scalar=collections.get_from(summary.KEY_SUMMARY_SCALAR),
+                histogram=collections.get_from(summary.KEY_SUMMARY_HISTOGRAM),
+            )
 
-    train_run_hooks.extend(train_hooks)
-    #initialize here to avoid creating one event file per run
-    if eval_dataset is not None:
+        train_run_hooks = [
+                hooks.CheckpointSaverHook(saver, per_step=run_config.save_steps, skip_step=run_config.skip_steps),
+                hooks.LoggingHook(model_spec.loss, board_log_dir=os.path.join(run_config.model_dir, 'train_history'), 
+                    summary_record=summary_record,
+                    per_step=run_config.log_steps, 
+                    skip_step=run_config.skip_steps),
+                hooks.StopAtStepHook(run_config.max_steps, run_config.run_steps),
+            ]
+        train_run_hooks.extend(train_hooks)
+        #initialize here to avoid creating one event file per run
         eval_hook = hooks.EvalHook(eval_model_spec.metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
 
-    #[try -> with -> for]
-    try:
-        with MonitoredExecutor(train_exe, 
+        with train_dataset.start(), \
+            MonitoredExecutor(train_exe, 
                train_program,
                state=train_init_state,
                run_config=run_config,
                dev_count=dev_count,
                run_hooks=train_run_hooks,
             ) as train_exe:
-            for train_data in train_dataset.start():
-                train_exe.run(feed=train_data) # train
+            while True:
+                train_exe.run() # train
                 #start eval_loop
-                if eval_dataset is not None and \
+                if eval_dataset and \
                     train_exe.state.gstep % run_config.eval_steps == 0 and \
                     train_exe.state.gstep > run_config.skip_steps:
-
-                    eval_hook.set_train_state(train_exe.state)
-                    eval_run_hooks = [eval_hook]
-                    eval_run_hooks.extend(eval_hooks)
-                    #[try -> with -> for]
-                    try:
-                        with MonitoredExecutor(start_exe,
-                                   program=eval_program,
-                                   run_config=None,
-                                   dev_count=1, # single card eval
-                                   run_hooks=eval_run_hooks,
-                                ) as eval_exe:
-
-                                for eval_data in eval_dataset.start(places=[single_card_place]):
-                                    eval_exe.run(feed=eval_data)
-                                    #log.debug('eval')
-                    except StopException as e:
+                    try: #[try -> with -> while]
+                        eval_hook.set_train_state(train_exe.state)
+                        eval_run_hooks = [eval_hook]
+                        eval_run_hooks.extend(eval_hooks)
+                        with eval_dataset.start(), \
+                            MonitoredExecutor(start_exe,
+                               program=eval_program,
+                               run_config=None,
+                               dev_count=1, # single card eval
+                               run_hooks=eval_run_hooks,
+                            ) as eval_exe:
+                            while True:
+                                eval_exe.run()
+                                #log.debug('eval')
+                    except (F.core.EOFException, StopException):
                         pass
                     eval_result = eval_hook.result
                     for exporter in exporters:
                         exporter.export(start_exe, train_program, eval_result, train_exe.state)
-                        log.debug('eval done')
-    except StopException as e:
+                    log.debug('eval done')
+    except (F.core.EOFException, StopException):
         pass
 
 
