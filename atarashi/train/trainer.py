@@ -122,8 +122,8 @@ def predict(model_class_or_model_fn, params, run_config, infer_dataset, split_ba
     if not isinstance(pred, list) or not isinstance(pred, tuple):
         pred = [pred]
 
-    for infer_data in infer_dataset.start():
-        res = start_exe.run(program, feed=infer_data, fetch_list=pred)
+    with infer_dataset.start():
+        res = start_exe.run(program, fetch_list=pred)
         if split_batch:
             res = map(lambda i: i.tolist(), res)
             res = zip(*res) # transpose
@@ -214,7 +214,8 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
             ]
         train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
-        eval_hook = hooks.EvalHook(eval_model_spec.metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
+        if eval_dataset:
+            eval_hook = hooks.EvalHook(eval_model_spec.metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
 
         with train_dataset.start(), \
             MonitoredExecutor(train_exe, 
