@@ -201,6 +201,8 @@ class Dataset(object):
     def features(self):
         '''start point of net building. call this in a program scope'''
         assert self.name is not None, 'unnamed Dataset'
+        if len(self.data_shapes) != len(self.data_types):
+            raise ValueError('Dataset shapes and types not match: shape:%s types%s' % (repr(self.data_shapes), repr(self.data_types)))
         self.pyreader = L.py_reader(
                 50,
                 shapes=self.data_shapes,

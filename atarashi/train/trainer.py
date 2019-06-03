@@ -142,7 +142,16 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
                 log.info('Building Train Graph')
                 fea = train_dataset.features()
                 model_spec = build_net(model_class_or_model_fn, fea, RunMode.TRAIN, params, run_config)
-                log.info('Done')
+
+            scalars = collections.get_from(summary.KEY_SUMMARY_SCALAR)
+            histograms = collections.get_from(summary.KEY_SUMMARY_HISTOGRAM)
+            skip_opt = set()
+            if scalars is not None:
+                skip_opt |= {t for _, t in scalars}
+            if histograms is not None:
+                skip_opt |= {t for _, t in histograms}
+            F.memory_optimize(input_program=train_program, skip_opt_set=list(skip_opt))
+            log.info('Done')
 
     log.debug('Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n' % (repr(run_config), repr(params), repr(model_spec)))
 
@@ -246,12 +255,12 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
                                 eval_exe.run()
                                 #log.debug('eval')
                     except (F.core.EOFException, StopException):
-                        pass
+                        log.debug('Eval dataset ran out of data')
                     eval_result = eval_hook.result
                     for exporter in exporters:
                         exporter.export(start_exe, train_program, eval_result, train_exe.state)
                     log.debug('eval done')
     except (F.core.EOFException, StopException):
-        pass
+        log.debug('Train dataset ran out of data')
 
 
