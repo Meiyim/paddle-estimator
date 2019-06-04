@@ -19,6 +19,7 @@ import os
 import itertools
 import inspect
 from contextlib import contextmanager
+from six.moves import zip, map
 
 import paddle.fluid  as F
 import paddle.fluid.layers  as L

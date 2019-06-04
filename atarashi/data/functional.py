@@ -25,6 +25,8 @@ import numpy as np
 import gzip
 import struct
 import functools
+import six
+from six.moves import zip, map
 
 import paddle.fluid  as F
 import paddle.fluid.layers  as L
@@ -80,7 +82,7 @@ def interleave_func(iterable, map_fn, cycle_length, block_length):
             j = (jjj for jj in j for jjj in jj) #flatten
             buf.append(j)
 
-        for tup in itertools.zip_longest(*buf):
+        for tup in six.moves.zip_longest(*buf):
             for ii in (i for i in tup if i is not None):
                 yield ii
 

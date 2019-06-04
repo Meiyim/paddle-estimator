@@ -18,6 +18,7 @@ from __future__ import unicode_literals
 import os
 import sys
 import struct
+from six.moves import zip, map
 import itertools
 import gzip
 from functools import partial

@@ -16,6 +16,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import sys
+import six
 import logging
 import os
 import itertools
@@ -23,7 +24,8 @@ import json
 import abc
 import numpy as np
 
-class Model(abc.ABC):
+@six.add_metaclass(abc.ABCMeta)
+class Model():
     def __init__(self, config, mode):
         """
         Args:
