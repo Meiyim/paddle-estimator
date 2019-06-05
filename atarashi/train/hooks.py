@@ -140,8 +140,9 @@ class StopAtStepHook(RunHook):
 
 class EvalHook(RunHook):
     """hook this on a eval Executor"""
-    def __init__(self, metrics, board_log_dir):
+    def __init__(self, name, metrics, board_log_dir):
         self.board_log_dir = board_log_dir
+        self._name = name
         self.train_state = None
         self.writer = None
         self._result = None
@@ -187,10 +188,10 @@ class EvalHook(RunHook):
             self.writer.add_scalar(n, val, self.train_state.gstep)
 
         if len(printable):
-            log.info('*** Eval Res ***')
+            log.info('*** eval res: %10s ***' % self._name)
             for p in printable:
                 log.info(p)
-            log.info('****************')
+            log.info('******************************')
 
     def __del__(self):
         if self.writer:

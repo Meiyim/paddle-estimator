@@ -180,13 +180,7 @@ class Dataset(object):
         self.pyreader = None
 
     def __iter__(self):
-        def gen():
-            try:
-                for i in self.generator():
-                    yield i
-            except Exception as e:
-                log.exception(e)
-        return gen()
+        return self.generator()
 
     #def __call__(self):
     #    return self.generator()
@@ -219,7 +213,14 @@ class Dataset(object):
 
     def start(self):
         assert self.pyreader is not None, 'use Dataset.features to build net first, then start dataset'
-        return PyreaderContext(self.pyreader, self.generator)
+        def gen():
+            try:
+                for i in self.generator():
+                    yield i
+            except Exception as e:
+                log.exception(e)
+
+        return PyreaderContext(self.pyreader, gen)
 
     def apply(self, transform_func):
         #input_shapes = transform_func.input_shapes

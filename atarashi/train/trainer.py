@@ -17,6 +17,7 @@ from __future__ import unicode_literals
 
 import os
 import itertools
+import six
 import inspect
 from contextlib import contextmanager
 from six.moves import zip, map
@@ -27,9 +28,9 @@ import paddle.fluid.layers  as L
 import atarashi
 import atarashi.collection
 from atarashi.types import RunMode, StopException, SummaryRecord, StopException
-import atarashi.train
-import atarashi.util
-import atarashi.metrics
+from atarashi import train
+from atarashi import data
+from atarashi import metrics
 from atarashi.train import distribution
 
 from atarashi import summary
@@ -62,7 +63,7 @@ def get_parallel_exe(program, loss, dev_count):
 
 
 def build_net(model_fn_or_model, features, mode, params, run_config):
-    if issubclass(model_fn_or_model, atarashi.train.Model):
+    if issubclass(model_fn_or_model, train.Model):
         def model_fn(features, mode, params, run_config):
             if mode != atarashi.RunMode.PREDICT:
                 fea, label = features[: -1], features[-1]
@@ -78,10 +79,10 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
                 return atarashi.ModelSpec(loss=loss, predictions=pred, mode=mode)
             elif mode == atarashi.RunMode.EVAL:
                 loss = model.loss(pred, label)
-                metrics = model.metrics(pred, label)
-                if 'loss' not in metrics:
-                    metrics['loss'] = atarashi.metrics.Mean(loss)
-                return atarashi.ModelSpec(loss=loss, predictions=pred, metrics=metrics, mode=mode)
+                me = model.metrics(pred, label)
+                if 'loss' not in me:
+                    me['loss'] = metrics.Mean(loss)
+                return atarashi.ModelSpec(loss=loss, predictions=pred, metrics=me, mode=mode)
             elif mode == atarashi.RunMode.PREDICT:
                 return atarashi.ModelSpec(predictions=pred, mode=mode)
             else:
@@ -115,7 +116,7 @@ def predict(model_class_or_model_fn, params, run_config, infer_dataset, split_ba
     start_exe = F.Executor(F.CUDAPlace(0))
     start_exe.run(startup_prog)
 
-    saver = atarashi.train.Saver(run_config.model_dir, start_exe, program=program, max_ckpt_to_keep=run_config.max_ckpt)
+    saver = train.Saver(run_config.model_dir, start_exe, program=program, max_ckpt_to_keep=run_config.max_ckpt)
     assert saver.last_ckpt is not None, 'checkpiont not found in %s' % run_config.model_dir
     train_init_state = saver.restore()
 
@@ -160,16 +161,48 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
     distribution.init_distribuition_env(train_program, startup_prog)
 
     if eval_dataset is not None:
-        eval_program = F.Program()
-        eval_startup_program = startup_prog
-        with F.program_guard(eval_program, eval_startup_program):
-            #share var with Train net
-            with F.unique_name.guard():
-                log.info('Building Eval Graph')
-                fea = eval_dataset.features()
-                eval_model_spec = build_net(model_class_or_model_fn, fea, RunMode.EVAL, params, run_config)
-                log.info('Done')
-        eval_program = eval_program.clone(for_test=True)
+        if not (isinstance(eval_dataset, dict) or isinstance(eval_dataset, data.Dataset)):
+            raise ValueError('Eval dataset should be atarashi.data.Dataset of a list of that, got: %s' % eval_dataset)
+        if isinstance(eval_dataset, data.Dataset):
+            eval_dataset = {'eval': eval_dataset}
+        eval_program = {}
+        for name, ds in six.iteritems(eval_dataset):
+            program = F.Program()
+            with F.program_guard(program, startup_prog):
+                #share var with Train net
+                with F.unique_name.guard():
+                    log.info('Building Eval Graph')
+                    fea = ds.features()
+                    eval_model_spec = build_net(model_class_or_model_fn, fea, RunMode.EVAL, params, run_config)
+                    log.info('Done')
+            program = program.clone(for_test=True)
+            eval_program[name] = program
+
+        def evaluate(name, train_state):
+            try: #[try -> with -> while]
+                ds = eval_dataset[name]
+                program = eval_program[name]
+                log_dir = os.path.join(os.path.join(run_config.model_dir, 'eval_history'), name)
+                eval_hook = hooks.EvalHook(name, eval_model_spec.metrics, board_log_dir=log_dir)
+                eval_hook.set_train_state(train_state)
+                eval_run_hooks = [eval_hook]
+                eval_run_hooks.extend(eval_hooks)
+                with ds.start(), \
+                    MonitoredExecutor(start_exe,
+                       program=program,
+                       run_config=None,
+                       dev_count=1, # single card eval
+                       run_hooks=eval_run_hooks,
+                    ) as eval_exe:
+                    while True:
+                        eval_exe.run()
+                        #log.debug('eval')
+            except (F.core.EOFException, StopException):
+                log.debug('Eval dataset ran out of data')
+            else:
+                return eval_hook.result
+
+
         log.debug('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
 
 
@@ -195,7 +228,7 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
         else:
             raise NotImplementedError()
 
-    saver = atarashi.train.Saver(run_config.model_dir, start_exe, program=train_program, max_ckpt_to_keep=run_config.max_ckpt)
+    saver = train.Saver(run_config.model_dir, start_exe, program=train_program, max_ckpt_to_keep=run_config.max_ckpt)
     if saver.last_ckpt is not None:
         train_init_state = saver.restore()
     else:
@@ -224,9 +257,6 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
             ]
         train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
-        if eval_dataset:
-            eval_hook = hooks.EvalHook(eval_model_spec.metrics, board_log_dir=os.path.join(run_config.model_dir, 'eval_history')) 
-
         with train_dataset.start(), \
             MonitoredExecutor(train_exe, 
                train_program,
@@ -237,31 +267,17 @@ def train_and_eval(model_class_or_model_fn, params, run_config, train_dataset, e
             ) as train_exe:
             while True:
                 train_exe.run() # train
-                #start eval_loop
-                if eval_dataset and \
+                # start eval_loop
+                if eval_dataset is not None and \
                     train_exe.state.gstep % run_config.eval_steps == 0 and \
                     train_exe.state.gstep > run_config.skip_steps:
-                    try: #[try -> with -> while]
-                        eval_hook.set_train_state(train_exe.state)
-                        eval_run_hooks = [eval_hook]
-                        eval_run_hooks.extend(eval_hooks)
-                        with eval_dataset.start(), \
-                            MonitoredExecutor(start_exe,
-                               program=eval_program,
-                               run_config=None,
-                               dev_count=1, # single card eval
-                               run_hooks=eval_run_hooks,
-                            ) as eval_exe:
-                            while True:
-                                eval_exe.run()
-                                #log.debug('eval')
-                    except (F.core.EOFException, StopException):
-                        log.debug('Eval dataset ran out of data')
-                    eval_result = eval_hook.result
+                    eval_result = {}
+                    for name, _ in six.iteritems(eval_dataset):
+                        ret = evaluate(name, train_exe.state)
+                        eval_result[name] = ret
                     for exporter in exporters:
                         exporter.export(start_exe, train_program, eval_result, train_exe.state)
                     log.debug('eval done')
     except (F.core.EOFException, StopException):
         log.debug('Train dataset ran out of data')
-
 
