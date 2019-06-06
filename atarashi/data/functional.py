@@ -26,10 +26,10 @@ import gzip
 import struct
 import functools
 import six
-from six.moves import zip, map
+from six.moves import zip, map, filter
 
-import paddle.fluid  as F
-import paddle.fluid.layers  as L
+import paddle.fluid as F
+import paddle.fluid.layers as L
 from atarashi.util import map_structure
 from atarashi import log
 
@@ -46,6 +46,7 @@ def open_gz(filename):
                 l, = struct.unpack('i', data)
                 data = f.read(l)
                 yield data
+
     return gen
 
 
@@ -54,21 +55,25 @@ def open_file(filename):
         with open(filename, 'rb') as f:
             for line in f:
                 yield line
+
     return gen
 
 
 def shuffle_func(dataset, buffer_size):
     buf = []
+
     def gen():
         iterable = iter(dataset)
         while True:
-            buf = list(itertools.islice(iterable, buffer_size)) #cache this iterator
+            buf = list(itertools.islice(iterable,
+                                        buffer_size))  #cache this iterator
             if len(buf):
                 np.random.shuffle(buf)
                 for item in buf:
                     yield item
             else:
                 raise StopIteration
+
     return Dataset.from_generator(gen)
 
 
@@ -79,7 +84,7 @@ def interleave_func(iterable, map_fn, cycle_length, block_length):
         for i, j in enumerate(ls):
             j = itertools.islice(j, i, None, cycle_length)
             j = map(map_fn, j)
-            j = (jjj for jj in j for jjj in jj) #flatten
+            j = (jjj for jj in j for jjj in jj)  #flatten
             buf.append(j)
 
         for tup in six.moves.zip_longest(*buf):
@@ -99,18 +104,33 @@ def repeat_func(dataset, n):
             cnt += 1
             if cnt == n:
                 break
-            else: 
+            else:
                 iterable = iter(dataset)
+
     return Dataset.from_generator(gen)
 
 
-def map_map_func(dataset, map_fn):
+def filter_func(dataset, fn):
     def gen():
-        for i in dataset:
+        for i in iter(dataset):
             if isinstance(i, tuple) or isinstance(i, list):
-                yield map_fn(*i)
+                if fn(*i) is True:
+                    yield i
             else:
-                yield map_fn(i)
+                if fn(i) is True:
+                    yield i
+
+    return Dataset.from_generator(gen)
+
+
+def map_func(dataset, fn):
+    def gen():
+        for i in iter(dataset):
+            if isinstance(i, tuple) or isinstance(i, list):
+                yield fn(*i)
+            else:
+                yield fn(i)
+
     return Dataset.from_generator(gen)
 
 
@@ -121,9 +141,11 @@ def padded_batch_func(dataset, batch_size, pad_value):
             buf = list(itertools.islice(iterable, batch_size))
             if not len(buf):
                 raise StopIteration
-            buf = list(zip(*buf)) # transpose
+            buf = list(zip(*buf))  # transpose
             padded = []
-            assert len(buf) == len(pad_value), 'pad_value [%d] != element size[%d]' % (len(buf), len(pad_value))
+            assert len(buf) == len(
+                pad_value), 'pad_value [%d] != element size[%d]' % (
+                    len(buf), len(pad_value))
             for e, pv in zip(buf, pad_value):
                 elem = e[0]
                 if (not np.isscalar(elem)) and elem.shape != ():
@@ -131,6 +153,7 @@ def padded_batch_func(dataset, batch_size, pad_value):
                     e = map(lambda i: np.pad(i, [0, max_len - len(i)], 'constant', constant_values=pv), e)
                 padded.append(np.stack(e))
             yield padded
+
     return Dataset.from_generator(gen)
 
 
@@ -166,6 +189,7 @@ class Dataset(object):
         def gen():
             for i in iterable:
                 yield i
+
         ret = Dataset()
         ret.generator = gen
         ret.data_shapes = []
@@ -187,32 +211,36 @@ class Dataset(object):
 
     def placeholders(self):
         if self.data_shapes is None or self.data_types is None:
-            raise ValueError('try making placeholder from a shape/types undefined dataset')
+            raise ValueError(
+                'try making placeholder from a shape/types undefined dataset')
         ret = []
-        for i, (shape, types) in enumerate(zip(self.data_shapes, self.data_types)):
-            ret.append(L.data(str(i), shape=shape, append_batch_size=False, dtype=types))
+        for i, (shape,
+                types) in enumerate(zip(self.data_shapes, self.data_types)):
+            ret.append(
+                L.data(
+                    str(i), shape=shape, append_batch_size=False, dtype=types))
         return ret
-
 
     def features(self):
         '''start point of net building. call this in a program scope'''
         assert self.name is not None, 'unnamed Dataset'
         if len(self.data_shapes) != len(self.data_types):
-            raise ValueError('Dataset shapes and types not match: shape:%s types%s' % (repr(self.data_shapes), repr(self.data_types)))
+            raise ValueError(
+                'Dataset shapes and types not match: shape:%s types%s' %
+                (repr(self.data_shapes), repr(self.data_types)))
         self.pyreader = L.py_reader(
-                50,
-                shapes=self.data_shapes,
-                dtypes=self.data_types,
-                lod_levels=[0] * len(self.data_shapes),
-                name=self.name,
-                use_double_buffer=True,
-        )
+            50,
+            shapes=self.data_shapes,
+            dtypes=self.data_types,
+            lod_levels=[0] * len(self.data_shapes),
+            name=self.name,
+            use_double_buffer=True, )
         features = L.read_file(self.pyreader)
         return features
 
-
     def start(self):
         assert self.pyreader is not None, 'use Dataset.features to build net first, then start dataset'
+
         def gen():
             try:
                 for i in self.generator():
@@ -244,25 +272,28 @@ class Dataset(object):
         func = functools.partial(repeat_func, n=n)
         return self.apply(func)
 
-    def map(self, map_fn):
-        func = functools.partial(map_map_func, map_fn=map_fn)
+    def map(self, fn):
+        func = functools.partial(map_func, fn=fn)
+        return self.apply(func)
+
+    def filter(self, fn):
+        func = functools.partial(filter_func, fn=fn)
         return self.apply(func)
 
     def padded_batch(self, batch_size, pad_value):
-        func = functools.partial(padded_batch_func, batch_size=batch_size, pad_value=pad_value)
+        func = functools.partial(
+            padded_batch_func, batch_size=batch_size, pad_value=pad_value)
         return self.apply(func)
 
 
 class PyreaderContext(object):
-    def __init__(self, pyreader, dataset): 
+    def __init__(self, pyreader, dataset):
         pyreader.decorate_tensor_provider(dataset)
         self._pyreader = pyreader
 
     def __enter__(self):
         self._pyreader.start()
         return self
-    
+
     def __exit__(self, err_type, err_value, trace):
         self._pyreader.reset()
-
-
