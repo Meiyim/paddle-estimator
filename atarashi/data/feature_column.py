@@ -23,20 +23,20 @@ import itertools
 import gzip
 from functools import partial
 import multiprocessing
+import six
 
 import numpy as np
 from glob import glob
 from atarashi import log
 import atarashi.data
 from atarashi.data import Dataset
-from atarashi.data import example_pb2
+from atarashi.data import example_pb2, feature_pb2
 
+__all__ = [
+    'FeatureColumns', 'TextColumn', 'TextIDColumn', 'LabelColumn',
+    'basic_tokenizer', 'Column'
+]
 
-__all__ = ['FeatureColumns', 
-           'TextColumn', 
-           'TextIDColumn',
-           'LabelColumn',
-           'basic_tokenizer']
 
 def basic_tokenizer(sen):
     seg = sen.split(b' ')
@@ -44,12 +44,12 @@ def basic_tokenizer(sen):
     return seg
 
 
-class Column(object):
+class Column():
     def __init__(self, name):
         pass
 
     def raw_to_proto(self, raw):
-        return example_pb2.Feature()
+        return feature_pb2.Feature()
 
     @property
     def output_shapes(self):
@@ -57,13 +57,13 @@ class Column(object):
 
     @property
     def output_types(self):
-        raise NotImplementedError()
+        pass
 
     def proto_to_instance(self, proto):
-        raise NotImplementedError()
+        pass
 
     def raw_to_instance(self, raw):
-        raise NotImplementedError()
+        pass
 
 
 class LabelColumn(Column):
@@ -80,8 +80,7 @@ class LabelColumn(Column):
 
     def raw_to_proto(self, raw):
         ids = [int(raw)]
-        fe = example_pb2.Feature(tag=self.name, 
-            int64_list=example_pb2.Int64List(value=ids))
+        fe = feature_pb2.Feature(int64_list=feature_pb2.Int64List(value=ids))
         return fe
 
     def proto_to_instance(self, feature):
@@ -93,13 +92,21 @@ class LabelColumn(Column):
 
 
 class TextColumn(Column):
-    def __init__(self, name='text', vocab_file=None, vocab_list=None, unk_id=1, tokenizer=basic_tokenizer):
+    def __init__(self,
+                 name='text',
+                 vocab_file=None,
+                 vocab_list=None,
+                 unk_id=1,
+                 tokenizer=basic_tokenizer):
         self.name = name
         self.tokenizer = tokenizer
         self.unk_id = unk_id
         assert vocab_file or vocab_list
         if vocab_file:
-            self.vocab= {j.strip(): i for i, j in enumerate(open(vocab_file, 'rb').readlines())}
+            self.vocab = {
+                j.strip(): i
+                for i, j in enumerate(open(vocab_file, 'rb').readlines())
+            }
         if vocab_list:
             self.vocab = vocab_list
 
@@ -113,8 +120,7 @@ class TextColumn(Column):
 
     def raw_to_proto(self, raw):
         ids = [self.vocab.get(s, self.unk_id) for s in self.tokenizer(raw)]
-        fe = example_pb2.Feature(tag=self.name, 
-            int64_list=example_pb2.Int64List(value=ids))
+        fe = feature_pb2.Feature(int64_list=feature_pb2.Int64List(value=ids))
         return fe
 
     def proto_to_instance(self, feature):
@@ -135,15 +141,13 @@ class TextIDColumn(Column):
         return 'int64'
 
     def raw_to_proto(self, raw):
-        ids = [int(s)for s in raw.split(b' ')]
-        fe = example_pb2.Feature(tag=self.name, 
-            int64_list=example_pb2.Int64List(value=ids))
+        ids = [int(s) for s in raw.split(b' ')]
+        fe = feature_pb2.Feature(int64_list=feature_pb2.Int64List(value=ids))
         return fe
 
     def proto_to_instance(self, feature):
         ret = np.array(feature.int64_list.value, dtype=np.int64)
         return ret
-
 
     def raw_to_instance(self, raw):
         ret = np.array([int(i) for i in raw.split(b' ')], dtype=np.int64)
@@ -165,10 +169,12 @@ class FeatureColumns(object):
         return self._pool
 
     def raw_files(self, raw_dir):
-        return [os.path.join(raw_dir, p)for p in os.listdir(raw_dir)]
+        return [os.path.join(raw_dir, p) for p in os.listdir(raw_dir)]
 
     def gz_files(self, gz_dir):
-        return None if gz_dir is None else [os.path.join(gz_dir, p)for p in os.listdir(gz_dir)]
+        return None if gz_dir is None else [
+            os.path.join(gz_dir, p) for p in os.listdir(gz_dir)
+        ]
 
     def _make_gz_dataset(self, raw_dir, gz_dir):
         assert raw_dir or gz_dir, 'data_dir not specified when using gz mode'
@@ -185,10 +191,14 @@ class FeatureColumns(object):
             if len(raw_file) != 0:
                 log.debug('try making gz')
                 pool = self.pool()
-                args = [(os.path.join(raw_dir, f), os.path.join(gz_dir, f), self._columns, b'\t') for f in raw_file]
+                args = [(os.path.join(raw_dir, f), os.path.join(gz_dir, f),
+                         self._columns, b'\t') for f in raw_file]
                 pool.map(_make_gz, args)
             else:
-                assert len(os.listdir(gz_dir)) != 0, 'cant find gz file or raw-txt file at [%s] and [%s]' % (raw_dir, gz_dir)
+                assert len(
+                    os.listdir(gz_dir)
+                ) != 0, 'cant find gz file or raw-txt file at [%s] and [%s]' % (
+                    raw_dir, gz_dir)
         return gz_dir
 
     def _read_gz_dataset(self, gz_files, shuffle=False, repeat=True, **kwargs):
@@ -200,19 +210,32 @@ class FeatureColumns(object):
             dataset = dataset.repeat()
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(gz_files))
-        fn = partial(atarashi.data.interleave_func, map_fn=lambda filename: Dataset.from_gz_file(filename), cycle_length=len(gz_files), block_length=1)
+        fn = partial(
+            atarashi.data.interleave_func,
+            map_fn=lambda filename: Dataset.from_gz_file(filename),
+            cycle_length=len(gz_files),
+            block_length=1)
         dataset = dataset.apply(fn)
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
-        def _parse_gz(record_str): # function that takes python_str as input
+
+        def _parse_gz(record_str):  # function that takes python_str as input
             ex = example_pb2.Example()
             ex.ParseFromString(record_str)
-            ret = [column.proto_to_instance(feature) for feature, column in zip(ex.features, self._columns)]
+            ret = []
+            for name, col in six.iteritems(self._columns):
+                ins = col.proto_to_instance(ex.features[name])
+                ret.append(ins)
             return ret
+
         dataset = dataset.map(_parse_gz)
         return dataset
 
-    def _read_txt_dataset(self, data_files, shuffle=False, repeat=True, **kwargs):
+    def _read_txt_dataset(self,
+                          data_files,
+                          shuffle=False,
+                          repeat=True,
+                          **kwargs):
         log.info('reading raw files from %s' % '\n'.join(data_files))
         dataset = Dataset.from_iterable(data_files)
         if repeat:
@@ -220,25 +243,36 @@ class FeatureColumns(object):
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(data_files))
 
-        fn = partial(atarashi.data.interleave_func, map_fn=lambda filename: Dataset.from_file(filename), cycle_length=len(data_files), block_length=1)
+        fn = partial(
+            atarashi.data.interleave_func,
+            map_fn=lambda filename: Dataset.from_file(filename),
+            cycle_length=len(data_files),
+            block_length=1)
         dataset = dataset.apply(fn)
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
-        def _parse_txt_file(record_str): # function that takes python_str as input
+        def _parse_txt_file(
+                record_str):  # function that takes python_str as input
             features = record_str.strip(b'\n').split(b'\t')
-            ret = [column.raw_to_instance(feature) for feature, column in zip(features, self._columns)]
+            ret = [
+                column.raw_to_instance(feature)
+                for feature, column in zip(features, self._columns)
+            ]
             return ret
+
         dataset = dataset.map(_parse_txt_file)
         return dataset
 
-    def _prepare_dataset(self, dataset,
-            map_func_before_batch=None, 
-            map_func_after_batch=None, 
-            shuffle_buffer_size=None,
-            batch_size=1, 
-            pad_id=0,
-            prefetch=None, **kwargs):
+    def _prepare_dataset(self,
+                         dataset,
+                         map_func_before_batch=None,
+                         map_func_after_batch=None,
+                         shuffle_buffer_size=None,
+                         batch_size=1,
+                         pad_id=0,
+                         prefetch=None,
+                         **kwargs):
 
         if map_func_before_batch is not None:
             dataset = dataset.map(map_func_before_batch)
@@ -248,7 +282,13 @@ class FeatureColumns(object):
             dataset = dataset.map(map_func_after_batch)
         return dataset
 
-    def build_dataset(self, name, use_gz=True, data_dir=None, gz_dir=None, data_file=None, **kwargs):
+    def build_dataset(self,
+                      name,
+                      use_gz=True,
+                      data_dir=None,
+                      gz_dir=None,
+                      data_file=None,
+                      **kwargs):
         if use_gz:
             gz_dir = self._make_gz_dataset(data_dir, gz_dir)
             gz_files = self.gz_files(gz_dir)
@@ -277,12 +317,14 @@ def _make_gz(args):
                 #if i % 10000 == 0:
                 #    log.debug('making gz %s => %s [%d]' % (from_file, to_file, i))
                 if len(line) != len(columns):
-                    log.error('columns not match at %s, got %d, expect %d' % (from_file, len(line), len(columns)))
+                    log.error('columns not match at %s, got %d, expect %d' %
+                              (from_file, len(line), len(columns)))
                     continue
-                features = []
+                features = {}
                 for l, c in zip(line, columns):
-                    features.append(c.raw_to_proto(l))
-                example = example_pb2.Example(features=features)
+                    features[c.name] = c.raw_to_proto(l)
+                example = example_pb2.Example(features=feature_pb2.Features(
+                    feature=featuers))
                 serialized = example.SerializeToString()
                 l = len(serialized)
                 data = struct.pack('i%ds' % l, l, serialized)
@@ -291,5 +333,3 @@ def _make_gz(args):
     except Exception as e:
         log.exception(e)
         raise e
-
-
