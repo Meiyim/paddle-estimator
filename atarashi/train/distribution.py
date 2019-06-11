@@ -18,8 +18,8 @@ from __future__ import unicode_literals
 import functools
 import six
 
-import paddle.fluid  as F
-import paddle.fluid.layers  as L
+import paddle.fluid as F
+import paddle.fluid.layers as L
 
 from atarashi import log
 import atarashi.util
@@ -27,6 +27,7 @@ import atarashi.util
 __all__ = ['init_distribuition_env', 'status']
 
 status = None
+
 
 class DistributionMode(object):
     LOCAL = 0
@@ -48,12 +49,14 @@ class DistributionStatus(object):
                 idx = int(config['task']['index'])
                 self._this = cluster[task][idx]
 
-                self._env = cluster['worker'] + cluster['chief'] 
+                self._env = cluster['chief'] + cluster['worker']
                 if len(set(self._env)) != len(self._env):
-                    raise ValueError('duplicate host in dis_config %s' % config)
-                
+                    raise ValueError('duplicate host in dis_config %s' %
+                                     config)
+
             except KeyError as e:
-                raise ValueError('ATARASHI_DISCONFIG wrong: %s not found in %s' % (e, repr(dis_config)))
+                raise ValueError('ATARASHI_DISCONFIG wrong: %s not found in %s'
+                                 % (e, repr(dis_config)))
 
     @property
     def mode(self):
@@ -66,7 +69,8 @@ class DistributionStatus(object):
         elif self._mode == DistributionMode.NCCL:
             return len(self._env)
         else:
-            raise ValueError('Got unknow distribution mode %s' % repr(self._mode))
+            raise ValueError('Got unknow distribution mode %s' %
+                             repr(self._mode))
 
     @property
     def replica_id(self):
@@ -75,7 +79,8 @@ class DistributionStatus(object):
         elif self._mode == DistributionMode.NCCL:
             return self._env.index(self._this)
         else:
-            raise ValueError('Got unknow distribution mode %s' % repr(self._mode))
+            raise ValueError('Got unknow distribution mode %s' %
+                             repr(self._mode))
 
     @property
     def is_master(self):
@@ -84,15 +89,18 @@ class DistributionStatus(object):
         elif self._mode == DistributionMode.NCCL:
             return self.replica_id == 0
         else:
-            raise ValueError('got unknow distribution mode %s' % repr(self._mode))
+            raise ValueError('got unknow distribution mode %s' %
+                             repr(self._mode))
 
 
-dis_config = atarashi.util._get_dict_from_environ_or_json_or_file(None, 'ATARASHI_DISCONFIG')
+dis_config = atarashi.util._get_dict_from_environ_or_json_or_file(
+    None, 'ATARASHI_DISCONFIG')
 status = DistributionStatus(dis_config)
 
 
 def run_on_master(func):
     """skip function in distribution env"""
+
     @functools.wraps(func)
     def f(*arg, **kwargs):
         """f"""
@@ -104,9 +112,10 @@ def run_on_master(func):
             if status.is_master:
                 r = func(*arg, **kwargs)
             else:
-                r = 0 # skip function
+                r = 0  # skip function
         #MPI.COMM_WORLD.Barrier()
         return r
+
     return f
 
 
@@ -122,5 +131,5 @@ def init_distribuition_env(train_program, startup_program):
             current_endpoint=status._this,
             program=train_program,
             startup_program=startup_program)
-        log.info('Initializing distribution training with config %s' % (repr(dis_config)))
-
+        log.info('Initializing distribution training with config %s' %
+                 (repr(dis_config)))
