@@ -18,40 +18,40 @@ from __future__ import unicode_literals
 import sys
 import os
 import itertools
+import six
+import abc
 
 import numpy as np
-import paddle.fluid  as F
-import paddle.fluid.layers  as L
+import paddle.fluid as F
+import paddle.fluid.layers as L
 
 from atarashi import log
-from atarashi.train  import Saver
+from atarashi.train import Saver
 
-class Exporter(object):
+
+@six.add_metaclass(abc.ABCMeta)
+class Exporter():
+    @abc.abstractmethod
     def export(self, exe, program, eval_result, state):
         raise NotImplementedError()
 
 
 class BestExporter(Exporter):
-    def __init__(self, export_dir, key, export_highest=True):
+    def __init__(self, export_dir, cmp_fn):
         self._export_dir = export_dir
         self._best = None
-        if export_highest:
-            self.cmp_fn = lambda old, new: old[key] < new[key]
-        else:
-            self.cmp_fn = lambda old, new: old[key] > new[key]
-
+        self.cmp_fn = cmp_fn
 
     def export(self, exe, program, eval_result, state):
         if self._best is None:
             self._best = eval_result
             log.debug('[Best Exporter]: skip step %d' % state.gstep)
             return
-        if self.cmp_fn(self._best, eval_result) :
+        if self.cmp_fn(old=self._best, new=eval_result):
             log.debug('[Best Exporter]: export to %s' % self._export_dir)
-            saver = Saver(self._export_dir, exe, program=program, max_ckpt_to_keep=1)
+            saver = Saver(
+                self._export_dir, exe, program=program, max_ckpt_to_keep=1)
             saver.save(state)
-
             self._best = eval_result
         else:
             log.debug('[Best Exporter]: skip step %s' % state.gstep)
-

@@ -232,7 +232,7 @@ def train_and_eval(model_class_or_model_fn,
                         #log.debug('eval')
             except (F.core.EOFException, StopException):
                 log.debug('Eval dataset ran out of data')
-            else:
+            finally:
                 return eval_hook.result
 
         log.debug('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))

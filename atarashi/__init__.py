@@ -15,7 +15,6 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-
 import logging
 import six
 
@@ -28,12 +27,13 @@ console = logging.StreamHandler()
 log.addHandler(console)
 #file_handler = logging.FileHandler("./log")
 #from colorlog import ColoredFormatter
-formatter = logging.Formatter(fmt='[%(levelname)s] %(asctime)s [%(filename)12s:%(lineno)5d]:\t%(message)s')
+formatter = logging.Formatter(
+    fmt='[%(levelname)s] %(asctime)s [%(filename)12s:%(lineno)5d]:\t%(message)s'
+)
 console.setFormatter(formatter)
 log.setLevel(logging.DEBUG)
 log.propagate = False
 
-from atarashi.train import *
+#from atarashi.train import *
 from atarashi.types import *
 from atarashi.util import ArgumentParser, parse_hparam, parse_runconfig
-
