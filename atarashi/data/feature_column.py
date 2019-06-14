@@ -223,8 +223,9 @@ class FeatureColumns(object):
             ex = example_pb2.Example()
             ex.ParseFromString(record_str)
             ret = []
-            for name, col in six.iteritems(self._columns):
-                ins = col.proto_to_instance(ex.features[name])
+            fea_dict = ex.features.feature
+            for c in self._columns:
+                ins = c.proto_to_instance(fea_dict[c.name])
                 ret.append(ins)
             return ret
 
@@ -324,7 +325,7 @@ def _make_gz(args):
                 for l, c in zip(line, columns):
                     features[c.name] = c.raw_to_proto(l)
                 example = example_pb2.Example(features=feature_pb2.Features(
-                    feature=featuers))
+                    feature=features))
                 serialized = example.SerializeToString()
                 l = len(serialized)
                 data = struct.pack('i%ds' % l, l, serialized)
