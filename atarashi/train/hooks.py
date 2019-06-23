@@ -16,16 +16,18 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import sys
+import six
 import os
 import itertools
 
 import numpy as np
-import paddle.fluid  as F
-import paddle.fluid.layers  as L
+import paddle.fluid as F
+import paddle.fluid.layers as L
 from tensorboardX import SummaryWriter
 
 from atarashi import log
 from atarashi import util
+
 
 class RunHook(object):
     def __init__(self):
@@ -36,7 +38,7 @@ class RunHook(object):
 
     def before_run(self, state):
         return []
-    
+
     def after_run(self, res_list, state):
         pass
 
@@ -48,7 +50,12 @@ class RunHook(object):
 
 
 class LoggingHook(RunHook):
-    def __init__(self, loss, per_step=10, skip_step=100, board_log_dir=None, summary_record=None):
+    def __init__(self,
+                 loss,
+                 per_step=10,
+                 skip_step=100,
+                 board_log_dir=None,
+                 summary_record=None):
         self.loss = loss.name
         self.per_step = per_step
         self.skip_step = skip_step
@@ -88,8 +95,9 @@ class LoggingHook(RunHook):
             if self.summary_record:
                 self.writer.add_scalar('loss', loss, state.gstep)
 
-                s_np = res_list[1: 1 + len(self.s_name)]
-                h_np = res_list[1 + len(self.s_name): 1 + len(self.s_name) + len(self.h_name)]
+                s_np = res_list[1:1 + len(self.s_name)]
+                h_np = res_list[1 + len(self.s_name):1 + len(self.s_name) +
+                                len(self.h_name)]
 
                 for name, t in zip(self.s_name, s_np):
                     if np.isnan(t).any():
@@ -104,20 +112,22 @@ class LoggingHook(RunHook):
                         self.writer.add_histogram(name, t, state.gstep)
 
             if self.last_state is not None:
-                speed = (state.gstep - self.last_state.gstep) / (state.time - self.last_state.time)
+                speed = (state.gstep - self.last_state.gstep) / (
+                    state.time - self.last_state.time)
             else:
                 speed = -1.
 
             if speed > 0.:
                 self.writer.add_scalar('global_step', speed, state.gstep)
             self.last_state = state
-            
+
             log.info('\t'.join([
-                        'step: %d' % state.gstep,
-                        'steps/sec: %.5f' % speed,
-                        'loss: %.5f' % loss,
-                        '' if self.summary_record is None else ' '.join(map(lambda t: '%s:%s' % t, zip(self.s_name, s_np))),
-                    ]))
+                'step: %d' % state.gstep,
+                'steps/sec: %.5f' % speed,
+                'loss: %.5f' % loss,
+                '' if self.summary_record is None else ' '.join(
+                    map(lambda t: '%s:%s' % t, zip(self.s_name, s_np))),
+            ]))
 
     def after_train(self):
         if self.writer:
@@ -140,14 +150,20 @@ class StopAtStepHook(RunHook):
 
 class EvalHook(RunHook):
     """hook this on a eval Executor"""
+
     def __init__(self, name, metrics, board_log_dir):
         self.board_log_dir = board_log_dir
         self._name = name
         self.train_state = None
         self.writer = None
         self._result = None
+
+        if not isinstance(metrics, dict):
+            raise ValueError('metrics should be dict, got %s' % repr(metrics))
+
         if len(metrics):
-            self.names, self.metrics = zip(*metrics.items())
+            self.names = list(metrics.keys())
+            self.metrics = list(metrics.values())
         else:
             self.names, self.metrics = [], []
         self.writer = SummaryWriter(self.board_log_dir)
@@ -162,7 +178,14 @@ class EvalHook(RunHook):
     def before_run(self, state):
         ls = [m.tensor for m in self.metrics]
         for i in ls:
-            assert isinstance(i, list) or isinstance(i, tuple), 'metrics should return tuple or list of tensors'
+            if not (isinstance(i, list) or isinstance(i, tuple)):
+                raise ValueError(
+                    'metrics should return tuple or list of tensors, got %s' %
+                    repr(i))
+            for ii in i:
+                if not isinstance(ii, str):
+                    raise ValueError('metrics tensor be str, got %s' %
+                                     repr(ii))
         ls_flt, self.schema = util.flatten(ls)
         #log.debug(ls_flt)
         return ls_flt
@@ -208,5 +231,3 @@ class CheckpointSaverHook(RunHook):
         if state.gstep % self.per_step == 0 and \
                 state.step > self.skip_step:
             self.saver.save(state)
-
-

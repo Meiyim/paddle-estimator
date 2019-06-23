@@ -50,8 +50,8 @@ def get_parallel_exe(program, loss, dev_count):
     build_strategy = F.BuildStrategy()
     build_strategy.remove_unnecessary_lock = False
 
-    log.debug(distribution.status.num_replica)
-    log.debug(distribution.status.replica_id)
+    log.debug('replica id %d of %d' % (distribution.status.num_replica,
+                                       distribution.status.replica_id))
     train_exe = F.ParallelExecutor(
         use_cuda=True,
         loss_name=loss.name,

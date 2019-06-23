@@ -22,14 +22,13 @@ from time import time
 import shutil
 
 import numpy as np
-import paddle.fluid  as F
-import paddle.fluid.layers  as L
+import paddle.fluid as F
+import paddle.fluid.layers as L
 
 from atarashi import util
 from atarashi import log
 from atarashi.train import distribution
 from atarashi.types import StopException
-
 
 __all__ = ['MonitoredExecutor', 'Saver']
 
@@ -73,9 +72,17 @@ class RunState(object):
 
 
 class Saver(object):
-    def __init__(self, save_dir, exe, program, save_prefix='model', max_ckpt_to_keep=None):
+    def __init__(self,
+                 save_dir,
+                 exe,
+                 program,
+                 save_prefix='model',
+                 max_ckpt_to_keep=None):
         if exe is not None:
-            assert isinstance(exe, F.Executor), 'expect normal executor to save, got executor of type %s' % repr(type(exe))
+            assert isinstance(
+                exe, F.Executor
+            ), 'expect normal executor to save, got executor of type %s' % repr(
+                type(exe))
         self._exe = exe
         self._program = program
         self._save_dir = save_dir
@@ -85,7 +92,9 @@ class Saver(object):
         self.ckpt_info_path = os.path.join(save_dir, 'ckpt_info')
 
         if os.path.exists(self.ckpt_info_path):
-            self.ckpt_list = [p.strip() for p in open(self.ckpt_info_path).readlines()]
+            self.ckpt_list = [
+                p.strip() for p in open(self.ckpt_info_path).readlines()
+            ]
             log.debug(self.ckpt_list)
         else:
             self.ckpt_list = []
@@ -105,22 +114,28 @@ class Saver(object):
 
         self.ckpt_list.append(save_name)
         if len(self.ckpt_list) > self._max_ckpt_to_keep:
-            ckpt_to_keep = self.ckpt_list[-self._max_ckpt_to_keep: ]
+            ckpt_to_keep = self.ckpt_list[-self._max_ckpt_to_keep:]
             ckpt_to_remove = set(self.ckpt_list) - set(ckpt_to_keep)
             self.ckpt_list = ckpt_to_keep
             for ckpt in ckpt_to_remove:
                 ckpt_dir = os.path.join(self._save_dir, ckpt)
                 if os.path.exists(ckpt_dir):
                     shutil.rmtree(ckpt_dir)
-                    log.debug('No. of ckpt exceed %d, clean up: %s' % (self._max_ckpt_to_keep, ckpt_dir))
+                    log.debug('No. of ckpt exceed %d, clean up: %s' %
+                              (self._max_ckpt_to_keep, ckpt_dir))
         open(self.ckpt_info_path, 'w').write('\n'.join(self.ckpt_list))
 
     @distribution.run_on_master
     def restore(self, ckpt=-1):
-        assert abs(ckpt) <= len(self.ckpt_list), 'invalid restore ckpt number %d' % ckpt
+        assert abs(ckpt) <= len(
+            self.ckpt_list), 'invalid restore ckpt number %d' % ckpt
         path = os.path.join(self._save_dir, self.ckpt_list[ckpt])
         log.info('restore from ckpt %s' % path)
-        F.io.load_vars(self._exe, path, main_program=self._program, predicate=F.io.is_persistable)
+        F.io.load_vars(
+            self._exe,
+            path,
+            main_program=self._program,
+            predicate=F.io.is_persistable)
 
         meta_file = os.path.join(path, 'meta')
         state = RunState.from_str(open(meta_file).read())
@@ -129,12 +144,14 @@ class Saver(object):
 
 class MonitoredExecutor(object):
     """A wrapper handling the train loop"""
-    def __init__(self, executor, 
-            program, 
-            state=None,
-            run_config=None,
-            dev_count=1,
-            run_hooks=[]):
+
+    def __init__(self,
+                 executor,
+                 program,
+                 state=None,
+                 run_config=None,
+                 dev_count=1,
+                 run_hooks=[]):
         self._exe = executor
         self._hooks = run_hooks
         self._dev_count = dev_count
@@ -162,7 +179,8 @@ class MonitoredExecutor(object):
     def run(self, fetch_list=[], *args, **kwargs):
         #log.debug('Executor running step %d' % self._state.gstep)
         if self._hooks:
-            fetch_list = [h.before_run(self._state) for h in self._hooks] + fetch_list
+            fetch_list = [h.before_run(self._state)
+                          for h in self._hooks] + fetch_list
             fetch_list_len = map(len, fetch_list)
 
             fetch_list, schema = util.flatten(fetch_list)
@@ -173,8 +191,12 @@ class MonitoredExecutor(object):
             if isinstance(self._exe, F.ParallelExecutor):
                 res = self._exe.run(fetch_list=fetch_list, *args, **kwargs)
             else:
-                res = self._exe.run(self._program, fetch_list=fetch_list, *args, **kwargs)
-            res = [self.merge_result(r) for r in res]
+                res = self._exe.run(self._program,
+                                    fetch_list=fetch_list,
+                                    *args,
+                                    **kwargs)
+            if self._dev_count > 1:
+                res = [self.merge_result(r) for r in res]
             #log.debug(res)
 
             res = util.unflatten(res, schema)
@@ -191,12 +213,21 @@ class MonitoredExecutor(object):
         self._state = self._state.next()
 
     def __exit__(self, err_type, err_value, trace):
-        for h in self._hooks:
-            h.after_train()
-        log.info('********** Stop Loop ************')
+        if (err_type is None) or (err_type is F.core.EOFException) or (
+                err_type is StopException) or (err_type is KeyboardInterrupt):
+            try:
+                log.info('********** Stop Loop ************')
+                for h in self._hooks:
+                    h.after_train()
+            except Exception as e:
+                #log.exception('error occur after loop %s' % repr(e))
+                raise e
+        else:
+            log.info('********** Interupt Loop ************')
+            log.exception('error occur during loop %s: %s' %
+                          (err_type, err_value))
 
     def merge_result(self, ls):
         shape = (-1, ls.shape[0] // self._dev_count) + ls.shape[1:]
         ret = np.reshape(ls, shape).mean(axis=0)
         return ret
-
