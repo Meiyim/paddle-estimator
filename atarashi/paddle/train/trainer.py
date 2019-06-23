@@ -25,16 +25,12 @@ from six.moves import zip, map
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
-import atarashi
-import atarashi.collection
-from atarashi.types import RunMode, StopException, SummaryRecord, StopException
-from atarashi import train
-from atarashi import data
-from atarashi import metrics
-from atarashi.train import distribution
+from atarashi.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec
+from atarashi.paddle import train, summary, data, collection
+from atarashi.paddle.train import distribution
+from . import hooks, metrics
 
-from atarashi import summary
-from atarashi.train import hooks, MonitoredExecutor
+from .monitored_executor import MonitoredExecutor
 
 from atarashi import log
 
@@ -50,16 +46,16 @@ def get_parallel_exe(program, loss, dev_count):
     build_strategy = F.BuildStrategy()
     build_strategy.remove_unnecessary_lock = False
 
-    log.debug('replica id %d of %d' % (distribution.status.num_replica,
-                                       distribution.status.replica_id))
+    log.debug('replica id %d of %d' % (train.distribution.status.num_replica,
+                                       train.distribution.status.replica_id))
     train_exe = F.ParallelExecutor(
         use_cuda=True,
         loss_name=loss.name,
         build_strategy=build_strategy,
         exec_strategy=exec_strategy,
         main_program=program,
-        num_trainers=distribution.status.num_replica,
-        trainer_id=distribution.status.replica_id)
+        num_trainers=train.distribution.status.num_replica,
+        trainer_id=train.distribution.status.replica_id)
     return train_exe
 
 
@@ -67,7 +63,7 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
     if issubclass(model_fn_or_model, train.Model):
 
         def model_fn(features, mode, params, run_config):
-            if mode != atarashi.RunMode.PREDICT:
+            if mode != RunMode.PREDICT:
                 fea, label = features[:-1], features[-1]
             else:
                 fea = features
@@ -75,20 +71,19 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
             model = model_fn_or_model(params, mode, run_config=run_config)
             pred = model.forward(fea)
 
-            if mode == atarashi.RunMode.TRAIN:
+            if mode == RunMode.TRAIN:
                 loss = model.loss(pred, label)
                 model.backward(loss)
-                return atarashi.ModelSpec(
-                    loss=loss, predictions=pred, mode=mode)
-            elif mode == atarashi.RunMode.EVAL:
+                return ModelSpec(loss=loss, predictions=pred, mode=mode)
+            elif mode == RunMode.EVAL:
                 loss = model.loss(pred, label)
                 me = model.metrics(pred, label)
                 if 'loss' not in me:
                     me['loss'] = metrics.Mean(loss)
-                return atarashi.ModelSpec(
+                return ModelSpec(
                     loss=loss, predictions=pred, metrics=me, mode=mode)
-            elif mode == atarashi.RunMode.PREDICT:
-                return atarashi.ModelSpec(predictions=pred, mode=mode)
+            elif mode == RunMode.PREDICT:
+                return ModelSpec(predictions=pred, mode=mode)
             else:
                 raise RuntimeError('unknown run mode %s' % mode)
     elif inspect.isfunction(model_fn_or_model):
@@ -162,7 +157,7 @@ def train_and_eval(model_class_or_model_fn,
     startup_prog = F.Program()
     with F.program_guard(train_program, startup_prog):
         with F.unique_name.guard():
-            with atarashi.collection.Collections() as collections:
+            with collection.Collections() as collections:
                 log.info('Building Train Graph')
                 fea = train_dataset.features()
                 model_spec = build_net(model_class_or_model_fn, fea,
@@ -184,7 +179,7 @@ def train_and_eval(model_class_or_model_fn,
         % (repr(run_config), repr(params), repr(model_spec)))
 
     #init distribution env if envvir ATARASHI_DISCONFIG is set
-    distribution.init_distribuition_env(train_program, startup_prog)
+    train.distribution.init_distribuition_env(train_program, startup_prog)
 
     if eval_dataset is not None:
         if not (isinstance(eval_dataset, dict) or isinstance(eval_dataset,
@@ -232,7 +227,6 @@ def train_and_eval(model_class_or_model_fn,
                         #log.debug('eval')
             except (F.core.EOFException, StopException):
                 log.debug('Eval dataset ran out of data')
-            finally:
                 return eval_hook.result
 
         log.debug('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))

@@ -26,7 +26,7 @@ import paddle.fluid as F
 import paddle.fluid.layers as L
 
 from atarashi import log
-from atarashi.train import Saver
+from atarashi.paddle.train import Saver
 
 
 @six.add_metaclass(abc.ABCMeta)
@@ -43,6 +43,8 @@ class BestExporter(Exporter):
         self.cmp_fn = cmp_fn
 
     def export(self, exe, program, eval_result, state):
+        log.debug('New evaluate result: %s \nold: %s' %
+                  (repr(eval_result), repr(self._best)))
         if self._best is None:
             self._best = eval_result
             log.debug('[Best Exporter]: skip step %d' % state.gstep)

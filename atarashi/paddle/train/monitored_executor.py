@@ -27,8 +27,8 @@ import paddle.fluid.layers as L
 
 from atarashi import util
 from atarashi import log
-from atarashi.train import distribution
 from atarashi.types import StopException
+from . import distribution
 
 __all__ = ['MonitoredExecutor', 'Saver']
 

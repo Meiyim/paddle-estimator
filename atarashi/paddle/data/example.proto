@@ -16,7 +16,7 @@
 // model training or inference.
 syntax = "proto3";
 
-import "atarashi/data/feature.proto";
+import "atarashi/paddle/data/feature.proto";
 package atarashi;
 
 // An Example is a mostly-normalized data format for storing data for

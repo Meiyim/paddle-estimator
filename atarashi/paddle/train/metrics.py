@@ -23,6 +23,8 @@ import sklearn.metrics
 
 from atarashi import log
 
+__all__ = ['Metrics', 'F1', 'Recall', 'Precision', 'Mrr', 'Mean', 'Acc']
+
 
 class Metrics(object):
     def __init__(self):
@@ -223,7 +225,7 @@ class Mrr(Metrics):
                     key=key_func),
                 key=key_func)
         ]
-        mrr = np.float(sum(mrr_for_qid) / len(mrr_for_qid))
+        mrr = np.array(sum(mrr_for_qid) / len(mrr_for_qid))
         return mrr
 
 

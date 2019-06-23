@@ -15,5 +15,10 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from atarashi.data.functional import *
-from atarashi.data.feature_column import *
+import six
+from atarashi.types import *
+from atarashi.util import ArgumentParser, parse_hparam, parse_runconfig
+
+from . import data
+from . import train
+from atarashi.paddle.train import *

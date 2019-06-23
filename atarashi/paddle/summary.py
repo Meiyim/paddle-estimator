@@ -15,34 +15,19 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-import os
-from collections import namedtuple
+import sys
+
+from .collection import add_to, get_from
+
+KEY_SUMMARY_SCALAR = 1
+KEY_SUMMARY_HISTOGRAM = 2
 
 
-class RunMode(object):
-    TRAIN = 1
-    PREDICT = 2
-    EVAL = 3
+def scalar(name, tensor):
+    tensor.persistable = True
+    add_to(KEY_SUMMARY_SCALAR, (name, tensor.name))
 
 
-SummaryRecord = namedtuple('SummaryRecord', ['scalar', 'histogram'])
-
-WarmStartSetting = namedtuple('WarmStartSetting', ['predicate_fn', 'from_dir'])
-
-RunConfig = namedtuple('RunConfig', [
-    'batch_size', 'model_dir', 'max_steps', 'save_steps', 'eval_steps',
-    'skip_steps', 'log_steps', 'run_steps', 'max_ckpt', 'shit'
-])
-RunConfig.__new__.__defaults__ = (None, ) * len(RunConfig._fields)
-
-ModelSpec = namedtuple('ModelSpec', [
-    'loss',
-    'predictions',
-    'metrics',
-    'mode',
-])
-ModelSpec.__new__.__defaults__ = (None, ) * len(ModelSpec._fields)
-
-
-class StopException(Exception):
-    pass
+def histogram(name, tensor):
+    tensor.persistable = True
+    add_to(KEY_SUMMARY_HISTOGRAM, (name, tensor.name))

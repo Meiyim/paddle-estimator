@@ -24,6 +24,7 @@ import json
 import abc
 import numpy as np
 
+
 @six.add_metaclass(abc.ABCMeta)
 class Model():
     def __init__(self, config, mode):
@@ -44,7 +45,6 @@ class Model():
         """
         pass
 
-
     @abc.abstractmethod
     def loss(self, predictions, label):
         """
@@ -58,7 +58,6 @@ class Model():
         """
         pass
 
-
     @abc.abstractmethod
     def backward(self, loss):
         """
@@ -70,7 +69,6 @@ class Model():
         """
         pass
 
-        
     @abc.abstractmethod
     def metrics(self, predictions, label):
         """
@@ -82,5 +80,3 @@ class Model():
             (dict): k-v map like: {"metrics_name": atarashi.Metrics } 
         """
         return {}
-
-
