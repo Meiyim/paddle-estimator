@@ -43,9 +43,9 @@ __all__ = ['train_and_eval', 'predict']
 
 def get_parallel_exe(program, loss, dev_count):
     exec_strategy = F.ExecutionStrategy()
-    exec_strategy.num_threads = dev_count
-    exec_strategy.num_iteration_per_drop_scope = min(10,
-                                                     1000)  # important shit
+    exec_strategy.num_threads = 4  #2 for fp32 4 for fp16
+    exec_strategy.use_experimental_executor = True
+    exec_strategy.num_iteration_per_drop_scope = 10  #important shit
 
     build_strategy = F.BuildStrategy()
     build_strategy.remove_unnecessary_lock = False
@@ -237,12 +237,18 @@ def train_and_eval(model_class_or_model_fn,
 
         log.debug('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
 
-    dev_count = F.core.get_cuda_device_count()
+    dev_list = F.cuda_places()  #list all visible divices
+    log.debug('Visible device %s' % repr(dev_list))
+    #dev_list = [int(i) for i in os.environ.get('FLAGS_selected_gpus').split(',')]
+    #log.debug('GPU list is specified %s' % repr(dev_list))
+    #dev_count = len(dev_list)
+
     #param broadcast happened when creating ParallelProgram, init before this
 
     #The order of this 3 steps really matters
     #1. init train
-    single_card_place = F.CUDAPlace(0)
+    #single_card_place = F.CUDAPlace(0)
+    single_card_place = dev_list[0]
     start_exe = F.Executor(single_card_place)
     start_exe.run(startup_prog)
 
@@ -276,7 +282,7 @@ def train_and_eval(model_class_or_model_fn,
         train_init_state = None
 
     #3.create paralle executor(broadcast variable)
-    train_exe = get_parallel_exe(train_program, model_spec.loss, dev_count)
+    train_exe = get_parallel_exe(train_program, model_spec.loss, len(dev_list))
 
     log.info('Device count %d' % F.core.get_cuda_device_count())
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
@@ -311,7 +317,6 @@ def train_and_eval(model_class_or_model_fn,
                train_program,
                state=train_init_state,
                run_config=run_config,
-               dev_count=dev_count,
                run_hooks=train_run_hooks,
             ) as train_exe:
             while True:

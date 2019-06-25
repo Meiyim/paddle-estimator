@@ -17,6 +17,7 @@ from __future__ import unicode_literals
 
 import functools
 import six
+from time import sleep
 
 import paddle.fluid as F
 import paddle.fluid.layers as L
@@ -133,3 +134,5 @@ def init_distribuition_env(train_program, startup_program):
             startup_program=startup_program)
         log.info('Initializing distribution training with config %s' %
                  (repr(dis_config)))
+        if status.is_master:
+            sleep(30)

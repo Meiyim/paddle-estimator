@@ -150,11 +150,10 @@ class MonitoredExecutor(object):
                  program,
                  state=None,
                  run_config=None,
-                 dev_count=1,
                  run_hooks=[]):
         self._exe = executor
         self._hooks = run_hooks
-        self._dev_count = dev_count
+        self._dev_count = executor.device_count
         self._state = RunState() if state is None else state
 
         self._program = program
