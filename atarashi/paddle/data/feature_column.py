@@ -28,9 +28,9 @@ import six
 import numpy as np
 from glob import glob
 from atarashi import log
-import atarashi.data
-from atarashi.data import Dataset
-from atarashi.data import example_pb2, feature_pb2
+from .functional import interleave_func
+from .functional import Dataset
+from . import example_pb2, feature_pb2
 
 __all__ = [
     'FeatureColumns', 'TextColumn', 'TextIDColumn', 'LabelColumn',
@@ -211,7 +211,7 @@ class FeatureColumns(object):
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(gz_files))
         fn = partial(
-            atarashi.data.interleave_func,
+            interleave_func,
             map_fn=lambda filename: Dataset.from_gz_file(filename),
             cycle_length=len(gz_files),
             block_length=1)
@@ -245,7 +245,7 @@ class FeatureColumns(object):
             dataset = dataset.shuffle(buffer_size=len(data_files))
 
         fn = partial(
-            atarashi.data.interleave_func,
+            interleave_func,
             map_fn=lambda filename: Dataset.from_file(filename),
             cycle_length=len(data_files),
             block_length=1)

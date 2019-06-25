@@ -19,8 +19,10 @@ import sys
 
 _global_collection = None
 
+
 class Collections(object):
     """global collections to record everything"""
+
     def __init__(self):
         self.col = {}
 
@@ -49,5 +51,3 @@ def get_from(key):
     if _global_collection is not None:
         return _global_collection.get_collection(key)
     return None
-
-
