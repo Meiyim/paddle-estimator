@@ -60,10 +60,10 @@ class Column():
         pass
 
     def proto_to_instance(self, proto):
-        pass
+        raise NotImplementedError()
 
     def raw_to_instance(self, raw):
-        pass
+        raise NotImplementedError()
 
 
 class LabelColumn(Column):
@@ -126,6 +126,10 @@ class TextColumn(Column):
     def proto_to_instance(self, feature):
         ret = np.array(feature.int64_list.value, dtype=np.int64)
         return ret
+
+    def raw_to_instance(self, raw):
+        ids = [self.vocab.get(s, self.unk_id) for s in self.tokenizer(raw)]
+        return np.array(ids, dtype=np.int64)
 
 
 class TextIDColumn(Column):
@@ -265,6 +269,35 @@ class FeatureColumns(object):
         dataset = dataset.map(_parse_txt_file)
         return dataset
 
+    def _read_stdin_dataset(self,
+                            encoding='utf8',
+                            shuffle=False,
+                            repeat=True,
+                            **kwargs):
+        log.info('reading raw files stdin')
+
+        def gen():
+            for i in sys.stdin:
+                yield i.encode(encoding)
+
+        dataset = Dataset.from_generator(gen)
+        if repeat:
+            dataset = dataset.repeat()
+        if shuffle:
+            dataset = dataset.shuffle(buffer_size=1000)
+
+        def _parse_txt_file(
+                record_str):  # function that takes python_str as input
+            features = record_str.strip(b'\n').split(b'\t')
+            ret = [
+                column.raw_to_instance(feature)
+                for feature, column in zip(features, self._columns)
+            ]
+            return ret
+
+        dataset = dataset.map(_parse_txt_file)
+        return dataset
+
     def _prepare_dataset(self,
                          dataset,
                          map_func_before_batch=None,
@@ -302,6 +335,11 @@ class FeatureColumns(object):
             else:
                 raise ValueError('data_dir or data_files not specified')
             ds = self._read_txt_dataset(data_files, **kwargs)
+        ds.name = name
+        return ds
+
+    def build_dataset_from_stdin(self, name, **kwargs):
+        ds = self._read_stdin_dataset(**kwargs)
         ds.name = name
         return ds
 
