@@ -153,7 +153,10 @@ class MonitoredExecutor(object):
                  run_hooks=[]):
         self._exe = executor
         self._hooks = run_hooks
-        self._dev_count = executor.device_count
+        if isinstance(executor, F.ParallelExecutor):
+            self._dev_count = executor.device_count
+        else:
+            self._dev_count = 1
         self._state = RunState() if state is None else state
 
         self._program = program

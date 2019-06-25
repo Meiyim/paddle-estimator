@@ -219,7 +219,6 @@ def train_and_eval(model_class_or_model_fn,
                     MonitoredExecutor(start_exe,
                        program=program,
                        run_config=None,
-                       dev_count=1, # single card eval
                        run_hooks=eval_run_hooks,
                     ) as eval_exe:
                     while True:
