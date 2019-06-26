@@ -130,18 +130,23 @@ def predict(model_class_or_model_fn,
     train_init_state = saver.restore()
 
     pred = model_spec.predictions
-    if not isinstance(pred, list) or not isinstance(pred, tuple):
+    if not isinstance(pred, list) and not isinstance(pred, tuple):
         pred = [pred]
 
-    with infer_dataset.start():
-        res = start_exe.run(program, fetch_list=pred)
-        if split_batch:
-            res = map(lambda i: i.tolist(), res)
-            res = zip(*res)  # transpose
-            for r in res:
-                yield r
-        else:
-            yield res
+    steps = run_config.max_steps if run_config.max_steps is not None else -1
+    try:
+        with infer_dataset.start():
+            for _ in itertools.count(steps):
+                res = start_exe.run(program, fetch_list=pred)
+                if split_batch:
+                    res = map(lambda i: i.tolist(), res)
+                    res = zip(*res)  # transpose
+                    for r in res:
+                        yield r
+                else:
+                    yield res
+    except F.core.EOFException:
+        log.debug('Predict done')
 
 
 def train_and_eval(model_class_or_model_fn,

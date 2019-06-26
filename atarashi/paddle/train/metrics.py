@@ -123,7 +123,7 @@ class F1(Precision):
     def eval(self):
         tp = (self.label_saver & self.pred_saver).astype(np.int64).sum()
         t = self.label_saver.astype(np.int64).sum()
-        p = (self.label_saver).astype(np.int64).sum()
+        p = self.pred_saver.astype(np.int64).sum()
         precision = tp / t
         recall = tp / p
         return 2 * precision * recall / (precision + recall + 1.e-6)
@@ -225,7 +225,7 @@ class Mrr(Metrics):
                     key=key_func),
                 key=key_func)
         ]
-        mrr = np.array(sum(mrr_for_qid) / len(mrr_for_qid))
+        mrr = np.float32(sum(mrr_for_qid) / len(mrr_for_qid))
         return mrr
 
 

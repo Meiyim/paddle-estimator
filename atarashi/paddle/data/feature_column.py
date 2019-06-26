@@ -269,25 +269,22 @@ class FeatureColumns(object):
         dataset = dataset.map(_parse_txt_file)
         return dataset
 
-    def _read_stdin_dataset(self,
-                            encoding='utf8',
-                            shuffle=False,
-                            repeat=True,
-                            **kwargs):
+    def _read_stdin_dataset(self, encoding='utf8', shuffle=False, **kwargs):
         log.info('reading raw files stdin')
 
         def gen():
-            for i in sys.stdin:
-                yield i.encode(encoding)
+            while True:
+                line = sys.stdin.buffer.readline()
+                if len(line) == 0:
+                    break
+                yield line,
 
         dataset = Dataset.from_generator(gen)
-        if repeat:
-            dataset = dataset.repeat()
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
-        def _parse_txt_file(
-                record_str):  # function that takes python_str as input
+        def _parse_stdin(record_str):
+            '''function that takes python_str as input'''
             features = record_str.strip(b'\n').split(b'\t')
             ret = [
                 column.raw_to_instance(feature)
@@ -295,7 +292,7 @@ class FeatureColumns(object):
             ]
             return ret
 
-        dataset = dataset.map(_parse_txt_file)
+        dataset = dataset.map(_parse_stdin)
         return dataset
 
     def _prepare_dataset(self,

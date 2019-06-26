@@ -145,7 +145,7 @@ def padded_batch_func(dataset, batch_size, pad_value):
             padded = []
             assert len(buf) == len(
                 pad_value), 'pad_value [%d] != element size[%d]' % (
-                    len(buf), len(pad_value))
+                    len(pad_value), len(buf))
             for e, pv in zip(buf, pad_value):
                 elem = e[0]
                 if (not np.isscalar(elem)) and elem.shape != ():
