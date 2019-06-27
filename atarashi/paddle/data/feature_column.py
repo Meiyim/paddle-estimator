@@ -67,7 +67,7 @@ class Column():
 
 
 class LabelColumn(Column):
-    def __init__(self, name='text'):
+    def __init__(self, name):
         self.name = name
 
     @property
@@ -93,15 +93,16 @@ class LabelColumn(Column):
 
 class TextColumn(Column):
     def __init__(self,
-                 name='text',
+                 name,
+                 unk_id,
                  vocab_file=None,
                  vocab_list=None,
-                 unk_id=1,
                  tokenizer=basic_tokenizer):
         self.name = name
         self.tokenizer = tokenizer
         self.unk_id = unk_id
-        assert vocab_file or vocab_list
+        if not (vocab_file or vocab_list):
+            raise ValueError('at least specify vocab_file or vocab_list')
         if vocab_file:
             self.vocab = {
                 j.strip(): i
@@ -133,7 +134,7 @@ class TextColumn(Column):
 
 
 class TextIDColumn(Column):
-    def __init__(self, name='text'):
+    def __init__(self, name):
         self.name = name
 
     @property

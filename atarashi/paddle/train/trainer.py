@@ -106,9 +106,14 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
 
 def predict(model_class_or_model_fn,
             params,
-            run_config,
+            model_dir,
             infer_dataset,
+            run_config=None,
+            steps=-1,
             split_batch=True):
+    if not os.path.exists(model_dir):
+        raise ValueError('model dir not found %s' % model_dir)
+
     program = F.Program()
     startup_prog = F.Program()
     with F.program_guard(program, startup_prog):
@@ -117,24 +122,20 @@ def predict(model_class_or_model_fn,
             model_spec = build_net(model_class_or_model_fn, fea,
                                    RunMode.PREDICT, params, run_config)
     program = program.clone(for_test=True)
-
     start_exe = F.Executor(F.CUDAPlace(0))
     start_exe.run(startup_prog)
 
-    saver = train.Saver(
-        run_config.model_dir,
+    F.io.load_vars(
         start_exe,
-        program=program,
-        max_ckpt_to_keep=run_config.max_ckpt)
-    assert saver.last_ckpt is not None, 'checkpiont not found in %s' % run_config.model_dir
-    train_init_state = saver.restore()
+        model_dir,
+        main_program=program,
+        predicate=F.io.is_persistable)
 
     pred = model_spec.predictions
     if not isinstance(pred, list) and not isinstance(pred, tuple):
         pred = [pred]
-
-    steps = run_config.max_steps if run_config.max_steps is not None else -1
     try:
+        log.info('Runining predict from dir: %s' % model_dir)
         with infer_dataset.start():
             for _ in itertools.count(steps):
                 res = start_exe.run(program, fetch_list=pred)
