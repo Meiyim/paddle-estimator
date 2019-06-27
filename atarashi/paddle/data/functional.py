@@ -134,19 +134,22 @@ def map_func(dataset, fn):
     return Dataset.from_generator(gen)
 
 
-def padded_batch_func(dataset, batch_size, pad_value):
+def padded_batch_func(dataset, batch_size, pad_value=0):
     def gen():
         iterable = iter(dataset)
+        pad_value_t = pad_value
         while True:
             buf = list(itertools.islice(iterable, batch_size))
             if not len(buf):
                 raise StopIteration
             buf = list(zip(*buf))  # transpose
+            if type(pad_value_t) not in [list, tuple]:
+                pad_value_t = [pad_value_t] * len(buf)
             padded = []
             assert len(buf) == len(
-                pad_value), 'pad_value [%d] != element size[%d]' % (
-                    len(pad_value), len(buf))
-            for e, pv in zip(buf, pad_value):
+                pad_value_t), 'pad_value [%d] != element size[%d]' % (
+                    len(pad_value_t), len(buf))
+            for e, pv in zip(buf, pad_value_t):
                 elem = e[0]
                 if (not np.isscalar(elem)) and elem.shape != ():
                     max_len = max(map(len, e))
@@ -280,7 +283,7 @@ class Dataset(object):
         func = functools.partial(filter_func, fn=fn)
         return self.apply(func)
 
-    def padded_batch(self, batch_size, pad_value):
+    def padded_batch(self, batch_size, pad_value=0):
         func = functools.partial(
             padded_batch_func, batch_size=batch_size, pad_value=pad_value)
         return self.apply(func)
