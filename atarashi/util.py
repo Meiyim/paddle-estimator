@@ -27,7 +27,7 @@ from atarashi import log
 
 
 def ArgumentParser(name):
-    parser = argparse.ArgumentParser('DAN model on paddle')
+    parser = argparse.ArgumentParser('atarashi model')
     #parser.add_argument('--param_dir', type=str)
     parser.add_argument('--run_config', type=str, default='')
     parser.add_argument('--hparam', type=str, default='')
@@ -47,21 +47,24 @@ def _get_dict_from_environ_or_json_or_file(args, env_name):
         try:
             r = eval(s)
         except SyntaxError as e:
-            raise ValueError('json parse error: %s \n>Got json: %s' % (repr(e), s))
+            raise ValueError('json parse error: %s \n>Got json: %s' %
+                             (repr(e), s))
         return r
     else:
-        return s #None
+        return s  #None
 
 
 def parse_runconfig(args=None):
-    d = _get_dict_from_environ_or_json_or_file(args.run_config, 'ATARASHI_RUNCONFIG')
+    d = _get_dict_from_environ_or_json_or_file(args.run_config,
+                                               'ATARASHI_RUNCONFIG')
     if d is None:
         raise ValueError('run_config not found')
     return RunConfig(**d)
 
 
 def parse_hparam(args=None):
-    d = _get_dict_from_environ_or_json_or_file(args.hparam, 'ATARASHI_RUNCONFIG')
+    d = _get_dict_from_environ_or_json_or_file(args.hparam,
+                                               'ATARASHI_RUNCONFIG')
     if d is None:
         raise ValueError('hparam not found')
     return d
@@ -78,7 +81,7 @@ def unflatten(structure, schema):
     start = 0
     res = []
     for _range in schema:
-        res.append(structure[start: start + _range])
+        res.append(structure[start:start + _range])
         start += _range
     return res
 
@@ -89,9 +92,8 @@ def is_struture(s):
 
 def map_structure(func, s):
     if isinstance(s, list) or isinstance(s, tuple):
-        return [map_structure(func, ss)for ss in s]
+        return [map_structure(func, ss) for ss in s]
     elif isinstance(s, dict):
         return {k: map_structure(func, v) for k, v in six.iteritems(s)}
     else:
         return func(s)
-

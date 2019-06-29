@@ -95,19 +95,12 @@ def interleave_func(iterable, map_fn, cycle_length, block_length):
 
 
 def repeat_func(dataset, n):
-    def gen():
-        cnt = 0
-        iterable = iter(dataset)
-        while True:
-            for item in iterable:
-                yield item
-            cnt += 1
-            if cnt == n:
-                break
-            else:
-                iterable = iter(dataset)
-
-    return Dataset.from_generator(gen)
+    iterable = iter(dataset)
+    if n >= 0:
+        ret = itertools.chain(*itertools.tee(iterable, n))
+    else:
+        ret = itertools.cycle(iterable)
+    return Dataset.from_iterable(ret)
 
 
 def filter_func(dataset, fn):
@@ -132,6 +125,12 @@ def map_func(dataset, fn):
                 yield fn(i)
 
     return Dataset.from_generator(gen)
+
+
+def shard_func(dataset, num_shards, index):
+    iterable = iter(dataset)
+    ret = itertools.islice(iterable, index, None, num_shards)
+    return Dataset.from_iterable(ret)
 
 
 def padded_batch_func(dataset, batch_size, pad_value=0):
@@ -281,6 +280,11 @@ class Dataset(object):
 
     def filter(self, fn):
         func = functools.partial(filter_func, fn=fn)
+        return self.apply(func)
+
+    def shard(self, num_shards, index):
+        func = functools.partial(
+            shard_func, num_shards=num_shards, index=index)
         return self.apply(func)
 
     def padded_batch(self, batch_size, pad_value=0):

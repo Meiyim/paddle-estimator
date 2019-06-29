@@ -28,6 +28,8 @@ import six
 import numpy as np
 from glob import glob
 from atarashi import log
+from atarashi.paddle.train import distribution
+
 from .functional import interleave_func
 from .functional import Dataset
 from . import example_pb2, feature_pb2
@@ -206,13 +208,24 @@ class FeatureColumns(object):
                     raw_dir, gz_dir)
         return gz_dir
 
-    def _read_gz_dataset(self, gz_files, shuffle=False, repeat=True, **kwargs):
+    def _read_gz_dataset(self,
+                         gz_files,
+                         shuffle=False,
+                         repeat=True,
+                         shard=False,
+                         **kwargs):
         if len(gz_files) == 0:
             raise ValueError('reading gz from empty file list: %s' % gz_files)
         log.info('reading gz from %s' % '\n'.join(gz_files))
         dataset = Dataset.from_iterable(gz_files)
         if repeat:
             dataset = dataset.repeat()
+
+        if shard and distribution.status.mode == distribution.DistributionMode.NCCL:
+            log.info('Apply dataset sharding in distribution env')
+            train_ds = train_ds.shard(distribution.status.num_replica,
+                                      distribution.status.replica_id)
+
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(gz_files))
         fn = partial(
