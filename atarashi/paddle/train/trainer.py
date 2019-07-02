@@ -293,19 +293,19 @@ def train_and_eval(model_class_or_model_fn,
 
         train_run_hooks = [
             hooks.StopAtStepHook(run_config.max_steps, run_config.run_steps),
+            hooks.LoggingHook(
+                model_spec.loss,
+                board_log_dir=os.path.join(run_config.model_dir,
+                                           'train_history'),
+                summary_record=summary_record,
+                per_step=run_config.log_steps,
+                skip_step=run_config.skip_steps),
         ]
         if distribution.status.is_master:
             train_run_hooks += [
                 hooks.CheckpointSaverHook(
                     saver,
                     per_step=run_config.save_steps,
-                    skip_step=run_config.skip_steps),
-                hooks.LoggingHook(
-                    model_spec.loss,
-                    board_log_dir=os.path.join(run_config.model_dir,
-                                               'train_history'),
-                    summary_record=summary_record,
-                    per_step=run_config.log_steps,
                     skip_step=run_config.skip_steps),
             ]
 

@@ -125,7 +125,6 @@ class Saver(object):
                               (self._max_ckpt_to_keep, ckpt_dir))
         open(self.ckpt_info_path, 'w').write('\n'.join(self.ckpt_list))
 
-    @distribution.run_on_master
     def restore(self, ckpt=-1):
         assert abs(ckpt) <= len(
             self.ckpt_list), 'invalid restore ckpt number %d' % ckpt
