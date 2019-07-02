@@ -69,8 +69,16 @@ class Column():
 
 
 class LabelColumn(Column):
-    def __init__(self, name):
+    def __init__(self, name, vocab_list=None, vocab_file=None):
         self.name = name
+        self.vocab = None
+        if vocab_file:
+            self.vocab = {
+                j.strip(): i
+                for i, j in enumerate(open(vocab_file, 'rb').readlines())
+            }
+        if vocab_list:
+            self.vocab = vocab_list
 
     @property
     def output_shapes(self):
@@ -81,7 +89,10 @@ class LabelColumn(Column):
         return 'int64'
 
     def raw_to_proto(self, raw):
-        ids = [int(raw)]
+        if self.vocab is None:
+            ids = [int(raw)]
+        else:
+            ids = [self.vocab[raw]]
         fe = feature_pb2.Feature(int64_list=feature_pb2.Int64List(value=ids))
         return fe
 
