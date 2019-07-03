@@ -101,7 +101,11 @@ class LabelColumn(Column):
         return ret
 
     def raw_to_instance(self, raw):
-        return int(raw)
+        if self.vocab is None:
+            ids = int(raw)
+        else:
+            ids = self.vocab[raw]
+        return ids
 
 
 class TextColumn(Column):
