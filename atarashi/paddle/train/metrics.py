@@ -124,8 +124,8 @@ class F1(Precision):
         tp = (self.label_saver & self.pred_saver).astype(np.int64).sum()
         t = self.label_saver.astype(np.int64).sum()
         p = self.pred_saver.astype(np.int64).sum()
-        precision = tp / t
-        recall = tp / p
+        precision = tp / (t + 1.e-6)
+        recall = tp / (p + 1.e-6)
         return 2 * precision * recall / (precision + recall + 1.e-6)
 
 
