@@ -103,7 +103,6 @@ class Saver(object):
     def last_ckpt(self):
         return self.ckpt_list[-1] if len(self.ckpt_list) else None
 
-    @distribution.run_on_master
     def save(self, state):
         save_name = '%s_%d' % (self._save_prefix, state.gstep)
         save_dir = os.path.join(self._save_dir, save_name)
