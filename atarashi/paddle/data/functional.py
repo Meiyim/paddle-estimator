@@ -64,15 +64,19 @@ def shuffle_func(dataset, buffer_size):
 
     def gen():
         iterable = iter(dataset)
-        while True:
-            buf = list(itertools.islice(iterable,
-                                        buffer_size))  #cache this iterator
+        try:
+            while len(buf) < buffer_size:
+                buf.append(next(iterable))
+            while 1:
+                i = random.randint(0, buffer_size - 1)
+                n = next(iterable)
+                yield buf[i]
+                buf[i] = n
+        except StopIteration:
             if len(buf):
-                np.random.shuffle(buf)
-                for item in buf:
-                    yield item
-            else:
-                raise StopIteration
+                random.shuffle(buf)
+                for i in buf:
+                    yield i
 
     return Dataset.from_generator(gen)
 

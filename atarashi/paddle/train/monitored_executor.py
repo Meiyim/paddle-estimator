@@ -129,11 +129,19 @@ class Saver(object):
             self.ckpt_list), 'invalid restore ckpt number %d' % ckpt
         path = os.path.join(self._save_dir, self.ckpt_list[ckpt])
         log.info('restore from ckpt %s' % path)
+
+        def fn(v):
+            vpath = os.path.join(path, v.name)
+            if F.io.is_persistable(v):
+                if os.path.exists(vpath):
+                    return True
+                else:
+                    log.warning('var %s not found in checkpoint, ignored' %
+                                v.name)
+            return False
+
         F.io.load_vars(
-            self._exe,
-            path,
-            main_program=self._program,
-            predicate=F.io.is_persistable)
+            self._exe, path, main_program=self._program, predicate=fn)
 
         meta_file = os.path.join(path, 'meta')
         state = RunState.from_str(open(meta_file).read())
