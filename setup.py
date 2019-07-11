@@ -21,6 +21,6 @@ setup(name='atarashi',
       author_email='chen_xuyi@outlook.com',
       license='Apache 2.0',
       packages=['atarashi'],
-      python_requires='>= 3.6.*',
+      python_requires='>= 2.6.*',
       install_requires=install_deps)
 
