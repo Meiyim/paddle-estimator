@@ -26,11 +26,14 @@ import paddle.fluid as F
 import paddle.fluid.layers as L
 
 from atarashi.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec
-from atarashi.paddle import train, summary, data, collection
+from atarashi.paddle import summary, collection
+from atarashi.paddle.data.functional import Dataset
 from atarashi.paddle.train import distribution
-from . import hooks, metrics
+from atarashi.paddle.train.model import Model
+from atarashi.paddle.train.monitored_executor import Saver
+from atarashi.paddle.train import hooks, metrics
 
-from .monitored_executor import MonitoredExecutor
+from atarashi.paddle.train.monitored_executor import MonitoredExecutor
 
 from atarashi import log
 
@@ -54,13 +57,13 @@ def get_parallel_exe(program, loss, dev_count):
         build_strategy=build_strategy,
         exec_strategy=exec_strategy,
         main_program=program,
-        num_trainers=train.distribution.status.num_replica,
-        trainer_id=train.distribution.status.replica_id)
+        num_trainers=distribution.status.num_replica,
+        trainer_id=distribution.status.replica_id)
     return train_exe
 
 
 def build_net(model_fn_or_model, features, mode, params, run_config):
-    if issubclass(model_fn_or_model, train.Model):
+    if issubclass(model_fn_or_model, Model):
 
         def model_fn(features, mode, params, run_config):
             if mode != RunMode.PREDICT:
@@ -185,15 +188,15 @@ def train_and_eval(model_class_or_model_fn,
         % (repr(run_config), repr(params), repr(model_spec)))
 
     #init distribution env if envvir ATARASHI_DISCONFIG is set
-    train.distribution.init_distribuition_env(train_program, startup_prog)
+    distribution.init_distribuition_env(train_program, startup_prog)
 
     if eval_dataset is not None:
         if not (isinstance(eval_dataset, dict) or isinstance(eval_dataset,
-                                                             data.Dataset)):
+                                                             Dataset)):
             raise ValueError(
-                'Eval dataset should be atarashi.data.Dataset of a list of that, got: %s'
+                'Eval dataset should be atarashi.Dataset of a list of that, got: %s'
                 % eval_dataset)
-        if isinstance(eval_dataset, data.Dataset):
+        if isinstance(eval_dataset, Dataset):
             eval_dataset = {'eval': eval_dataset}
         eval_program = {}
         for name, ds in six.iteritems(eval_dataset):
@@ -270,7 +273,7 @@ def train_and_eval(model_class_or_model_fn,
         else:
             raise NotImplementedError()
 
-    saver = train.Saver(
+    saver = Saver(
         run_config.model_dir,
         start_exe,
         program=train_program,

@@ -30,9 +30,9 @@ from glob import glob
 from atarashi import log
 from atarashi.paddle.train import distribution
 
-from .functional import interleave_func
-from .functional import Dataset
-from . import example_pb2, feature_pb2
+from atarashi.paddle.data.functional import interleave_func
+from atarashi.paddle.data.functional import Dataset
+from atarashi.paddle.data import example_pb2, feature_pb2
 
 __all__ = [
     'FeatureColumns', 'TextColumn', 'TextIDColumn', 'LabelColumn',
