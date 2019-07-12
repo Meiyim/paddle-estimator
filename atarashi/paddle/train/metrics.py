@@ -23,7 +23,9 @@ import sklearn.metrics
 
 from atarashi import log
 
-__all__ = ['Metrics', 'F1', 'Recall', 'Precision', 'Mrr', 'Mean', 'Acc']
+__all__ = [
+    'Metrics', 'F1', 'Recall', 'Precision', 'Mrr', 'Mean', 'Acc', 'ChunkF1'
+]
 
 
 class Metrics(object):
@@ -227,6 +229,125 @@ class Mrr(Metrics):
         ]
         mrr = np.float32(sum(mrr_for_qid) / len(mrr_for_qid))
         return mrr
+
+
+class ChunkF1(Metrics):
+    def __init__(self, label, pred, seqlen, num_label):
+        self.label = label
+        self.pred = pred
+        self.seqlen = seqlen
+        self.null_index = num_label - 1
+        self.label_cnt = 0
+        self.pred_cnt = 0
+        self.correct_cnt = 0
+
+    def _extract_bio_chunk(self, seq):
+        chunks = []
+        cur_chunk = None
+
+        for index in range(len(seq)):
+            tag = seq[index]
+            tag_type = tag // 2
+            tag_pos = tag % 2
+
+            if tag == self.null_index:
+                if cur_chunk is not None:
+                    chunks.append(cur_chunk)
+                    cur_chunk = None
+                continue
+
+            if tag_pos == 0:
+                if cur_chunk is not None:
+                    chunks.append(cur_chunk)
+                    cur_chunk = {}
+                cur_chunk = {"st": index, "en": index + 1, "type": tag_type}
+            else:
+                if cur_chunk is None:
+                    cur_chunk = {
+                        "st": index,
+                        "en": index + 1,
+                        "type": tag_type
+                    }
+                    continue
+
+                if cur_chunk["type"] == tag_type:
+                    cur_chunk["en"] = index + 1
+                else:
+                    chunks.append(cur_chunk)
+                    cur_chunk = {
+                        "st": index,
+                        "en": index + 1,
+                        "type": tag_type
+                    }
+
+        if cur_chunk is not None:
+            chunks.append(cur_chunk)
+        return chunks
+
+    def reset(self):
+        self.label_cnt = 0
+        self.pred_cnt = 0
+        self.correct_cnt = 0
+
+    @property
+    def tensor(self):
+        self.pred.persitable = True
+        self.label.persitable = True
+        self.seqlen.persitable = True
+        return [self.pred.name, self.label.name, self.seqlen.name]
+
+    def update(self, args):
+        pred, label, seqlen = args
+        pred = pred.reshape([-1]).astype(np.int32).tolist()
+        label = label.reshape([-1]).astype(np.int32).tolist()
+        seqlen = seqlen.reshape([-1]).astype(np.int32).tolist()
+
+        max_len = 0
+        for l in seqlen:
+            max_len = max(max_len, l)
+
+        for i in range(len(seqlen)):
+            seq_st = i * max_len + 1
+            seq_en = seq_st + (seqlen[i] - 2)
+            pred_chunks = self._extract_bio_chunk(pred[seq_st:seq_en])
+            label_chunks = self._extract_bio_chunk(label[seq_st:seq_en])
+            self.pred_cnt += len(pred_chunks)
+            self.label_cnt += len(label_chunks)
+
+            pred_index = 0
+            label_index = 0
+            while label_index < len(label_chunks) and pred_index < len(
+                    pred_chunks):
+                if pred_chunks[pred_index]['st'] < label_chunks[label_index][
+                        'st']:
+                    pred_index += 1
+                elif pred_chunks[pred_index]['st'] > label_chunks[label_index][
+                        'st']:
+                    label_index += 1
+                else:
+                    if pred_chunks[pred_index]['en'] == label_chunks[label_index]['en'] \
+                            and pred_chunks[pred_index]['type'] == label_chunks[label_index]['type']:
+                        self.correct_cnt += 1
+                    pred_index += 1
+                    label_index += 1
+
+    def eval(self):
+        if self.pred_cnt == 0:
+            precision = 0.0
+        else:
+            precision = 1.0 * self.correct_cnt / self.pred_cnt
+
+        if self.label_cnt == 0:
+            recall = 0.0
+        else:
+            recall = 1.0 * self.correct_cnt / self.label_cnt
+
+        if self.correct_cnt == 0:
+            f1 = 0.0
+        else:
+            f1 = 2 * precision * recall / (precision + recall)
+
+        return np.float32(f1)
 
 
 #class SemanticRecallMetrics(Metrics):
