@@ -16,15 +16,28 @@ import sys
 
 import numpy as np
 import tensorflow as tf
+import tensorflow.keras as K
+
 from tensorflow.estimator import ModeKeys, EstimatorSpec
 
-from .model import Model
+from atarashi.data.functional import Dataset as AtarashiDataset
+from atarashi.train.model import Model as AtarashiModel
 
 __all__ = ['train_and_eval', 'predict']
 
 
-def get_model_fn(model_fn_or_model, features, mode, params, run_config):
-    if issubclass(model_fn_or_model, train.Model):
+def get_estimator(model_fn_or_model, params, run_config, warm_start_setting):
+    def build_estimator(model_fn):
+        est_run_config = to_estimator_runconfig(run_config)
+        est = tfe.Estimator(
+            model_fn=model_fn,
+            model_dir=run_config.model_dir,
+            config=est_run_config,
+            params=params,
+            warm_start_from=warm_start_setting)
+        return est
+
+    if issubclass(model_fn_or_model, AtarashiModel):
 
         def model_fn(features, labels, mode, params, run_config):
             if mode != RunMode.PREDICT:
@@ -50,11 +63,18 @@ def get_model_fn(model_fn_or_model, features, mode, params, run_config):
                 return EstimatorSpec(predictions=pred, mode=mode)
             else:
                 raise RuntimeError('unknown run mode %s' % mode)
+
+        est = build_estimator(model_fn)
     elif inspect.isfunction(model_fn_or_model):
         model_fn = model_fn_or_model
+        est = build_estimator(model_fn)
+    elif isinstance(model_fn_or_model, K.Model):
+        est_run_config = to_estimator_runconfig(run_config)
+        est = K.estimator.model_to_estimator(
+            keras_model=model_fn_or_model, run_config=est_run_config)
     else:
         raise ValueError('unknown model %s' % model_fn_or_model)
-    return model_fn
+    return est
 
 
 def train_and_eval(model_class_or_model_fn,
@@ -66,7 +86,21 @@ def train_and_eval(model_class_or_model_fn,
                    train_hooks=[],
                    eval_hooks=[],
                    exporters=[]):
-    model_fn = get_model_fn(model_class_or_model_fn)
+    est = get_estimator(model_class_or_model_fn, params, run_config,
+                        warm_start_setting)
+    if not isinstance(eval_da, AtarashiDataset):
+        raise ValueError('only accept 1 eval dataset in tensorflor mode')
+
+    if eval_dataset is not None:
+        with train_dataset.start(), eval_dataset.start() as train_ds, eval_ds:
+            tfe.train_and_eval(
+                est,
+                tfe.TranSpec(
+                    train_ds, max_steps=run_config.max_steps),
+                tfe.EvalSpec(
+                    eval_ds, steps=None))
+    else:
+        est.train(train_ds, max_steps=run_config.max_steps)
 
 
 def predict(model_class_or_model_fn,

@@ -29,7 +29,7 @@ from atarashi.types import RunMode, StopException, SummaryRecord, StopException,
 from atarashi.paddle import summary, collection
 from atarashi.paddle.data.functional import Dataset
 from atarashi.paddle.train import distribution
-from atarashi.paddle.train.model import Model
+from atarashi.train.model import Model
 from atarashi.paddle.train.monitored_executor import Saver
 from atarashi.paddle.train import hooks, metrics
 
