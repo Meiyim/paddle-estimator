@@ -204,8 +204,8 @@ class Dataset(object):
 
     def __init__(self):
         self.name = None
-        self.data_shapes = None
-        self.data_types = None
+        self._data_shapes = None
+        self._data_types = None
         self.generator = None
         self.pyreader = None
 
@@ -215,10 +215,51 @@ class Dataset(object):
     #def __call__(self):
     #    return self.generator()
 
-    def placeholders(self):
-        if self.data_shapes is None or self.data_types is None:
+    def _infer_shapes_and_types(self):
+        if self.generator is not None and self.name is not None:
+            log.info('Try to infer data shapes & types from generator')
+            first_value = next(self.generator())
+            shapes, types = [], []
+            for v in first_value:
+                if not isinstance(v, np.ndarray):
+                    raise ValueError(
+                        'dataset generator should use numpy elements, got %s' %
+                        first_value)
+                shapes.append(v.shape)
+                types.append(v.dtype.name)
+            self._data_shapes = shapes
+            self._data_types = types
+            log.info('Dataset `%s` has data_shapes: %s data_types: %s' %
+                     (self.name, repr(shapes), repr(types)))
+        else:
             raise ValueError(
-                'try making placeholder from a shape/types undefined dataset')
+                'Try to infer data shapes or types from incomplete Dataset')
+
+    @property
+    def data_shapes(self):
+        if self._data_shapes is None:
+            self._infer_shapes_and_types()
+            return self._data_shapes
+        else:
+            return self._data_shapes
+
+    @data_shapes.setter
+    def data_shapes(self, val):
+        self._data_shapes = val
+
+    @property
+    def data_types(self):
+        if self._data_types is None:
+            self._infer_shapes_and_types()
+            return self._data_types
+        else:
+            return self._data_types
+
+    @data_types.setter
+    def data_types(self, val):
+        self._data_types = val
+
+    def placeholders(self):
         ret = []
         for i, (shape,
                 types) in enumerate(zip(self.data_shapes, self.data_types)):
@@ -229,11 +270,14 @@ class Dataset(object):
 
     def features(self):
         '''start point of net building. call this in a program scope'''
-        assert self.name is not None, 'unnamed Dataset'
+        if self.name is None:
+            raise ValueError('can not get feature from unnamed Dataset')
+
         if len(self.data_shapes) != len(self.data_types):
             raise ValueError(
                 'Dataset shapes and types not match: shape:%s types%s' %
-                (repr(self.data_shapes), repr(self.data_types)))
+                (repr(self._data_shapes), repr(self._data_types)))
+
         self.pyreader = L.py_reader(
             50,
             shapes=self.data_shapes,
@@ -261,8 +305,8 @@ class Dataset(object):
         #input_types = transform_func.input_types
         #data_shapes = transform_func.data_shapes
         #data_types = transform_func.data_types
-        #assert input_shapes == self.data_shapes
-        #assert input_types = self.data_types
+        #assert input_shapes == self._data_shapes
+        #assert input_types = self._data_types
         ret = transform_func(self)
         if self.name is not None:
             ret.name = self.name
