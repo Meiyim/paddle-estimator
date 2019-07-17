@@ -31,7 +31,7 @@ from six.moves import zip, map, filter
 from atarashi.util import map_structure
 from atarashi import log
 
-__all__ = ['Dataset', 'interleave_func']
+__all__ = ['Dataset']
 
 
 def open_gz(filename):
@@ -301,6 +301,14 @@ class Dataset(object):
     def shard(self, num_shards, index):
         func = functools.partial(
             shard_func, num_shards=num_shards, index=index)
+        return self.apply(func)
+
+    def interleave(self, map_fn, cycle_length, block_length):
+        func = functools.partial(
+            interleave_func,
+            map_fn=map_fn,
+            cycle_length=cycle_length,
+            block_length=block_length)
         return self.apply(func)
 
     def padded_batch(self, batch_size, pad_value=0):
