@@ -67,7 +67,7 @@ class TFreaderContext(object):
     def __enter__(self):
         shapes = tuple(self.data_shapes)
         types = tuple(self.data_types)
-        ds = lambda: tfd.Dataset.from_generator(self._gen, shapes, types)
+        ds = lambda: tfd.Dataset.from_generator_func(self._gen, shapes, types)
         return ds
 
     def __exit__(self, err_type, err_value, trace):

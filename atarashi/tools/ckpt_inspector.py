@@ -39,6 +39,12 @@ log.addHandler(console)
 log.setLevel(logging.DEBUG)
 
 
+def gen_arr(data, dtype):
+    num = len(data) // struct.calcsize(dtype)
+    arr = struct.unpack('%d%s' % (num, dtype), data)
+    return arr
+
+
 def parse(filename):
     with open(filename, 'rb') as f:
         read = lambda fmt: struct.unpack(fmt, f.read(struct.calcsize(fmt)))
@@ -47,7 +53,8 @@ def parse(filename):
         lodsize, = read('Q')
         log.debug(lodsize)
         if lodsize != 0:
-            raise RuntimeError('shit, it is LOD tensor!!! abort')
+            log.warning('shit, it is LOD tensor!!! skipped!!')
+            return None
         _, = read('I')  # version
         log.debug(_)
         pbsize, = read('i')
@@ -58,11 +65,14 @@ def parse(filename):
 
         log.info('type: [%s] dim %s' % (proto.data_type, proto.dims))
         if proto.data_type == framework_pb2.VarType.FP32:
-            T = 'f'
-            data = f.read()
-            num = len(data) // struct.calcsize(T)
-            floats = struct.unpack('%d%s' % (num, T), data)
-            arr = np.array(floats, dtype=np.float32).reshape(proto.dims)
+            arr = np.array(
+                gen_arr(f.read(), 'f'), dtype=np.float32).reshape(proto.dims)
+        elif proto.data_type == framework_pb2.VarType.INT64:
+            arr = np.array(
+                gen_arr(f.read(), 'q'), dtype=np.int64).reshape(proto.dims)
+        elif proto.data_type == framework_pb2.VarType.INT32:
+            arr = np.array(
+                gen_arr(f.read(), 'i'), dtype=np.int32).reshape(proto.dims)
         else:
             raise RuntimeError('Unknown dtype %s' % proto.data_type)
 
@@ -105,9 +115,11 @@ if __name__ == '__main__':
     parsed_arr = map(parse, files)
     if args.mode == 'show':
         for arr in parsed_arr:
-            show(arr)
+            if arr is not None:
+                show(arr)
     elif args.mode == 'dump':
         if args.to is None:
             raise ValueError('--to dir_name not specified')
         for arr, path in zip(parsed_arr, files):
-            dump(arr, path)
+            if arr is not None:
+                dump(arr, path)

@@ -74,7 +74,7 @@
 
 3. Dataset
 
-    如果觉得`FeatureColumns`太局限。可以使用`atarashi.Dataset.from_generator`来构造自己的dataset，配合你最熟悉的shuffle/ interleave/ padded_batch/ repeat 满足定制化需求.
+    如果觉得`FeatureColumns`太局限。可以使用`atarashi.Dataset.from_generator_func`来构造自己的dataset，配合你最熟悉的shuffle/ interleave/ padded_batch/ repeat 满足定制化需求.
     p.s. Dataset的前处理中可以使用numpy，提高了paddle程序的灵活性.
 
 4. MonitoredExecutor
@@ -102,5 +102,3 @@
 2. 自动超参数搜索
 3. 分布式同步/ 异步自动化并行
 4. ...
-
-
