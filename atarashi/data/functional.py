@@ -20,6 +20,7 @@ import logging
 import os
 import itertools
 import random
+import inspect
 import numpy as np
 
 import gzip
@@ -174,6 +175,8 @@ def padded_batch_func(dataset, batch_size, pad_value=0):
 class Dataset(object):
     @classmethod
     def from_generator(cls, gen, data_shapes=None, data_types=None):
+        if not inspect.is_generator_function(gen):
+            raise ValueError('expect generator function, got %s' % repr(gen))
         ret = cls()
         ret.generator = gen
         ret.data_shapes = data_shapes
@@ -199,9 +202,12 @@ class Dataset(object):
         return ret
 
     @classmethod
-    def from_iterable(cls, iterable):
+    def from_list(cls, ls):
+        if not isinstance(ls, list):
+            raise ValueError('expect list, got %s' % repr(ls))
+
         def gen():
-            for i in iterable:
+            for i in ls:
                 yield i
 
         ret = cls()
