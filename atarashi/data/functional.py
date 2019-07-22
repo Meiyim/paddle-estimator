@@ -175,7 +175,7 @@ def padded_batch_func(dataset, batch_size, pad_value=0):
 class Dataset(object):
     @classmethod
     def from_generator(cls, gen, data_shapes=None, data_types=None):
-        if not inspect.is_generator_function(gen):
+        if not inspect.isgeneratorfunction(gen):
             raise ValueError('expect generator function, got %s' % repr(gen))
         ret = cls()
         ret.generator = gen
