@@ -21,14 +21,16 @@ from functools import reduce
 from time import time
 import shutil
 
+import logging
 import numpy as np
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
 from atarashi import util
-from atarashi import log
 from atarashi.types import StopException
 from . import distribution
+
+log = logging.getLogger(__name__)
 
 __all__ = ['MonitoredExecutor', 'Saver']
 

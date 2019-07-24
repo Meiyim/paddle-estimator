@@ -30,7 +30,8 @@ import six
 from six.moves import zip, map, filter
 
 from atarashi.util import map_structure
-from atarashi import log
+
+log = logging.getLogger(__name__)
 
 __all__ = ['Dataset']
 

@@ -23,7 +23,6 @@ import argparse
 import itertools
 
 from atarashi.types import RunConfig
-from atarashi import log
 
 
 def ArgumentParser(name):

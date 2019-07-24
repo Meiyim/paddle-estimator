@@ -16,12 +16,13 @@ import sys
 import os
 import numpy as np
 import itertools
+import logging
 
 import paddle.fluid as F
 import paddle.fluid.layers as L
 import sklearn.metrics
 
-from atarashi import log
+log = logging.getLogger(__name__)
 
 __all__ = [
     'Metrics', 'F1', 'Recall', 'Precision', 'Mrr', 'Mean', 'Acc', 'ChunkF1'

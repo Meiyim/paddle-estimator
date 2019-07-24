@@ -24,15 +24,17 @@ import gzip
 from functools import partial
 import multiprocessing
 import six
+import logging
 
 import numpy as np
 from glob import glob
-from atarashi import log
 from atarashi.paddle.train import distribution
 
 from atarashi.data.functional import interleave_func
 from atarashi.paddle.data.functional import Dataset
 from atarashi.paddle.data import example_pb2, feature_pb2
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     'FeatureColumns', 'TextColumn', 'TextIDColumn', 'LabelColumn',

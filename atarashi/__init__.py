@@ -20,9 +20,7 @@ import six
 
 __version__ = '0.1'
 
-#assert six.PY3, 'atarashi work only in python3'
-
-log = logging.getLogger('atarashi')
+log = logging.getLogger(__name__)
 console = logging.StreamHandler()
 log.addHandler(console)
 #file_handler = logging.FileHandler("./log")

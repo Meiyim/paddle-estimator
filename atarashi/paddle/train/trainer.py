@@ -21,6 +21,7 @@ import six
 import inspect
 from contextlib import contextmanager
 from six.moves import zip, map
+import logging
 
 import paddle.fluid as F
 import paddle.fluid.layers as L
@@ -35,7 +36,7 @@ from atarashi.paddle.train import hooks, metrics
 
 from atarashi.paddle.train.monitored_executor import MonitoredExecutor
 
-from atarashi import log
+log = logging.getLogger(__name__)
 
 __all__ = ['train_and_eval', 'predict']
 

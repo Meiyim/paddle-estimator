@@ -21,13 +21,15 @@ import os
 import itertools
 
 import numpy as np
+import logging
 import paddle.fluid as F
 import paddle.fluid.layers as L
 from tensorboardX import SummaryWriter
 
-from atarashi import log
 from atarashi import util
 from atarashi.paddle.train import distribution
+
+log = logging.getLogger(__name__)
 
 
 class RunHook(object):

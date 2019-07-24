@@ -14,12 +14,14 @@
 
 import sys
 import numpy as np
+import logging
 
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
 from atarashi.data.functional import Dataset as DatasetBase
-from atarashi import log
+
+log = logging.getLogger(__name__)
 
 
 class Dataset(DatasetBase):
