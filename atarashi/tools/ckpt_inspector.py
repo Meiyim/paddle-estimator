@@ -49,16 +49,12 @@ def parse(filename):
     with open(filename, 'rb') as f:
         read = lambda fmt: struct.unpack(fmt, f.read(struct.calcsize(fmt)))
         _, = read('I')  # version
-        log.debug(_)
         lodsize, = read('Q')
-        log.debug(lodsize)
         if lodsize != 0:
             log.warning('shit, it is LOD tensor!!! skipped!!')
             return None
         _, = read('I')  # version
-        log.debug(_)
         pbsize, = read('i')
-        log.debug(pbsize)
         data = f.read(pbsize)
         proto = framework_pb2.VarType.TensorDesc()
         proto.ParseFromString(data)
@@ -94,6 +90,20 @@ def dump(arr, path):
     arr.dump(open(path, 'wb'))
 
 
+def dump_h5(arr, path, h5file):
+    path = os.path.join(args.to, path)
+    log.info('[h5] dump to %s' % path)
+    group = h5file
+    dirname, filename = os.path.split(path)
+    for scope in dirname.strip('/').split('/'):
+        try:
+            group.create_group(scope)
+        except ValueError:
+            pass
+        group = group[scope]
+    group[filename] = arr
+
+
 def list_dir(dir_or_file):
     if os.path.isfile(dir_or_file):
         return [dir_or_file]
@@ -108,6 +118,8 @@ if __name__ == '__main__':
     parser.add_argument('mode', choices=['show', 'dump'], type=str)
     parser.add_argument('file_or_dir', type=str)
     parser.add_argument('-t', "--to", type=str, default=None)
+    parser.add_argument(
+        '--format', type=str, choices=['np', 'h5'], default='np')
     parser.add_argument('-v', "--verbose", action='store_true')
     args = parser.parse_args()
 
@@ -120,6 +132,16 @@ if __name__ == '__main__':
     elif args.mode == 'dump':
         if args.to is None:
             raise ValueError('--to dir_name not specified')
-        for arr, path in zip(parsed_arr, files):
-            if arr is not None:
-                dump(arr, path)
+        if args.format == 'np':
+            for arr, path in zip(parsed_arr, files):
+                if arr is not None:
+                    dump(arr, path.replace(args.file_or_dir, ''))
+        elif args.format == 'h5':
+            import h5py as h5
+            with h5.File(args.to, 'w') as outfile:
+                for arr, path in zip(parsed_arr, files):
+                    if arr is not None:
+                        dump_h5(arr,
+                                path.replace(args.file_or_dir, ''), outfile)
+        else:
+            raise ValueError('unkown format' % args.format)
