@@ -167,21 +167,25 @@ def train_and_eval(model_class_or_model_fn,
     with F.program_guard(train_program, startup_prog):
         with F.unique_name.guard():
             with collection.Collections() as collections:
-                log.info('Building Train Graph')
+                log.info('Building Train Graph...')
                 fea = train_dataset.features()
                 model_spec = build_net(model_class_or_model_fn, fea,
                                        RunMode.TRAIN, params, run_config)
+                log.info('Building Train Graph: Done')
 
-            scalars = collections.get_from(summary.KEY_SUMMARY_SCALAR)
-            histograms = collections.get_from(summary.KEY_SUMMARY_HISTOGRAM)
-            skip_opt = set()
+            scalars = collections.get(collection.Key.SUMMARY_SCALAR)
+            histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
+            skip_opt = set(collections.get(collection.Key.SKIP_OPTIMIZE))
             if scalars is not None:
                 skip_opt |= {t for _, t in scalars}
             if histograms is not None:
                 skip_opt |= {t for _, t in histograms}
+            skip_opt = list(skip_opt)
+            log.debug('skip memory optimize for %d ops' % len(skip_opt))
+            log.debug('Memory optimizing...')
             F.memory_optimize(
-                input_program=train_program, skip_opt_set=list(skip_opt))
-            log.info('Done')
+                input_program=train_program, skip_opt_set=skip_opt)
+            log.debug('Memory optimizing: Done')
 
     log.debug(
         'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
@@ -291,8 +295,8 @@ def train_and_eval(model_class_or_model_fn,
 
     try:  #[try -> with -> while]
         summary_record = SummaryRecord(
-            scalar=collections.get_from(summary.KEY_SUMMARY_SCALAR),
-            histogram=collections.get_from(summary.KEY_SUMMARY_HISTOGRAM), )
+            scalar=collections.get(collection.Key.SUMMARY_SCALAR),
+            histogram=collections.get(collection.Key.SUMMARY_HISTOGRAM), )
 
         train_run_hooks = [
             hooks.StopAtStepHook(run_config.max_steps, run_config.run_steps),
