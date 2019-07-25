@@ -17,12 +17,13 @@ from __future__ import unicode_literals
 
 import functools
 import six
+import logging
 from time import sleep
 
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
-from atarashi import log
+log = logging.getLogger(__name__)
 import atarashi.util
 
 __all__ = ['init_distribuition_env', 'status']

@@ -20,13 +20,15 @@ import os
 import itertools
 import six
 import abc
+import logging
 
 import numpy as np
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
-from atarashi import log
 from atarashi.paddle.train import Saver
+
+log = logging.getLogger(__name__)
 
 
 @six.add_metaclass(abc.ABCMeta)

@@ -24,15 +24,17 @@ import gzip
 from functools import partial
 import multiprocessing
 import six
+import logging
 
 import numpy as np
 from glob import glob
-from atarashi import log
 from atarashi.paddle.train import distribution
 
-from atarashi.paddle.data.functional import interleave_func
+from atarashi.data.functional import interleave_func
 from atarashi.paddle.data.functional import Dataset
 from atarashi.paddle.data import example_pb2, feature_pb2
+
+log = logging.getLogger(__name__)
 
 __all__ = [
     'FeatureColumns', 'TextColumn', 'TextIDColumn', 'LabelColumn',
@@ -232,7 +234,7 @@ class FeatureColumns(object):
         if len(gz_files) == 0:
             raise ValueError('reading gz from empty file list: %s' % gz_files)
         log.info('reading gz from %s' % '\n'.join(gz_files))
-        dataset = Dataset.from_iterable(gz_files)
+        dataset = Dataset.from_list(gz_files)
         if repeat:
             dataset = dataset.repeat()
 
@@ -271,7 +273,7 @@ class FeatureColumns(object):
                           repeat=True,
                           **kwargs):
         log.info('reading raw files from %s' % '\n'.join(data_files))
-        dataset = Dataset.from_iterable(data_files)
+        dataset = Dataset.from_list(data_files)
         if repeat:
             dataset = dataset.repeat()
         if shuffle:
@@ -308,7 +310,7 @@ class FeatureColumns(object):
                     break
                 yield line,
 
-        dataset = Dataset.from_generator(gen)
+        dataset = Dataset.from_generator_func(gen)
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
