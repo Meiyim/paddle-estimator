@@ -49,6 +49,7 @@ def get_parallel_exe(program, loss, dev_count):
 
     build_strategy = F.BuildStrategy()
     build_strategy.remove_unnecessary_lock = False
+    #build_strategy.fuse_broadcast_ops = True
 
     log.debug('replica id %d of %d' % (distribution.status.replica_id,
                                        distribution.status.num_replica))
@@ -176,7 +177,10 @@ def train_and_eval(model_class_or_model_fn,
 
             scalars = collections.get(collection.Key.SUMMARY_SCALAR)
             histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
-            skip_opt = set(collections.get(collection.Key.SKIP_OPTIMIZE))
+            skip_optimize_ops = collections.get(collection.Key.SKIP_OPTIMIZE)
+            skip_opt = set()
+            if skip_optimize_ops is not None:
+                skip_opt |= set(skip_optimize_ops)
             if scalars is not None:
                 skip_opt |= {t for _, t in scalars}
             if histograms is not None:
