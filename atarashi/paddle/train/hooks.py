@@ -37,7 +37,7 @@ class RunHook(object):
         pass
 
     def before_train(self):
-        log.info('Train loop has hook %s' % self.__repr__())
+        log.debug('Train loop has hook %s' % self.__repr__())
 
     def before_run(self, state):
         return []
@@ -131,7 +131,7 @@ class LoggingHook(RunHook):
                     self.writer.add_scalar('global_step', speed, state.gstep)
 
             # log to stdout
-            log.info('\t'.join([
+            log.debug('\t'.join([
                 'step: %d' % state.gstep,
                 'steps/sec: %.5f' % speed,
                 'loss: %.5f' % loss,

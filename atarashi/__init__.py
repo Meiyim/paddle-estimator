@@ -15,23 +15,48 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import os
 import logging
 import six
+from time import time
 
 __version__ = '0.1'
 
 log = logging.getLogger(__name__)
-console = logging.StreamHandler()
-log.addHandler(console)
-#file_handler = logging.FileHandler("./log")
-#from colorlog import ColoredFormatter
+try:
+    os.mkdir('./log')
+except FileExistsError:
+    pass
+
+stream_hdl = logging.StreamHandler()
+
+if os.environ.get('OMPI_COMM_WORLD_RANK') is not None and os.environ.get(
+        'OMPI_COMM_WORLD_LOCAL_RANK') is not None:
+    rank = os.environ['OMPI_COMM_WORLD_RANK']
+    local_rank = os.environ['OMPI_COMM_WORLD_LOCAL_RANK']
+    filename = '%d.%s.%s.log' % (int(time()), rank, local_rank)
+else:
+    filename = '%d.log' % int(time())
+file_hdl = logging.FileHandler(os.path.join('./log', filename), mode='w')
+
 formatter = logging.Formatter(
     fmt='[%(levelname)s] %(asctime)s [%(filename)12s:%(lineno)5d]:\t%(message)s'
 )
-console.setFormatter(formatter)
-log.setLevel(logging.DEBUG)
-log.propagate = False
 
-#from atarashi.train import *
+file_hdl.setFormatter(formatter)
+try:
+    from colorlog import ColoredFormatter
+    fancy_formatter = ColoredFormatter(
+        fmt='%(log_color)s[%(levelname)s] %(asctime)s [%(filename)12s:%(lineno)5d]:\t%(message)s'
+    )
+    stream_hdl.setFormatter(fancy_formatter)
+except ImportError:
+    stream_hdl.setFormatter(formatter)
+
+log.setLevel(logging.DEBUG)
+log.addHandler(stream_hdl)
+log.addHandler(file_hdl)
+#log.propagate = False
+
 from atarashi.types import *
 from atarashi.util import ArgumentParser, parse_hparam, parse_runconfig

@@ -51,8 +51,8 @@ def get_parallel_exe(program, loss, dev_count):
     build_strategy.remove_unnecessary_lock = False
     #build_strategy.fuse_broadcast_ops = True
 
-    log.debug('replica id %d of %d' % (distribution.status.replica_id,
-                                       distribution.status.num_replica))
+    log.info('replica id %d of %d' % (distribution.status.replica_id,
+                                      distribution.status.num_replica))
     train_exe = F.ParallelExecutor(
         use_cuda=True,
         loss_name=loss.name,
@@ -192,7 +192,7 @@ def train_and_eval(model_class_or_model_fn,
                 input_program=train_program, skip_opt_set=skip_opt)
             log.debug('Memory optimizing: Done')
 
-    log.debug(
+    log.info(
         'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
         % (repr(run_config), repr(params), repr(model_spec)))
 
@@ -246,10 +246,10 @@ def train_and_eval(model_class_or_model_fn,
                 log.debug('Eval dataset ran out of data')
                 return eval_hook.result
 
-        log.debug('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
+        log.info('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
 
     dev_list = F.cuda_places()  #list all visible divices
-    log.debug('Visible device %s' % repr(dev_list))
+    log.info('Visible device %s' % repr(dev_list))
     #dev_list = [int(i) for i in os.environ.get('FLAGS_selected_gpus').split(',')]
     #log.debug('GPU list is specified %s' % repr(dev_list))
     #dev_count = len(dev_list)
@@ -271,7 +271,7 @@ def train_and_eval(model_class_or_model_fn,
             def fn(v):
                 ret = warm_start_setting.predicate_fn(v)
                 if ret:
-                    log.debug('warm start: %s' % v.name)
+                    log.info('warm start: %s' % v.name)
                 return ret
 
             F.io.load_vars(
