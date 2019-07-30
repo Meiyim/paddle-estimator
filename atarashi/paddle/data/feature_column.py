@@ -71,7 +71,7 @@ class Column():
 
 
 class LabelColumn(Column):
-    def __init__(self, name, vocab_list=None, vocab_file=None):
+    def __init__(self, name, vocab_dict=None, vocab_file=None):
         self.name = name
         self.vocab = None
         if vocab_file:
@@ -79,8 +79,8 @@ class LabelColumn(Column):
                 j.strip(): i
                 for i, j in enumerate(open(vocab_file, 'rb').readlines())
             }
-        if vocab_list:
-            self.vocab = vocab_list
+        if vocab_dict:
+            self.vocab = vocab_dict
 
     @property
     def output_shapes(self):
@@ -115,20 +115,20 @@ class TextColumn(Column):
                  name,
                  unk_id,
                  vocab_file=None,
-                 vocab_list=None,
+                 vocab_dict=None,
                  tokenizer=basic_tokenizer):
         self.name = name
         self.tokenizer = tokenizer
         self.unk_id = unk_id
-        if not (vocab_file or vocab_list):
-            raise ValueError('at least specify vocab_file or vocab_list')
+        if not (vocab_file or vocab_dict):
+            raise ValueError('at least specify vocab_file or vocab_dict')
         if vocab_file:
             self.vocab = {
                 j.strip(): i
                 for i, j in enumerate(open(vocab_file, 'rb').readlines())
             }
-        if vocab_list:
-            self.vocab = vocab_list
+        if vocab_dict:
+            self.vocab = vocab_dict
 
     @property
     def output_shapes(self):
