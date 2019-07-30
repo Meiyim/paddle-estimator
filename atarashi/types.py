@@ -30,8 +30,9 @@ SummaryRecord = namedtuple('SummaryRecord', ['scalar', 'histogram'])
 WarmStartSetting = namedtuple('WarmStartSetting', ['predicate_fn', 'from_dir'])
 
 RunConfig = namedtuple('RunConfig', [
-    'batch_size', 'model_dir', 'max_steps', 'save_steps', 'eval_steps',
-    'skip_steps', 'log_steps', 'run_steps', 'max_ckpt', 'shit'
+    'batch_size', 'model_dir', 'run_steps', 'max_steps', 'save_steps',
+    'eval_steps', 'eval_max_steps', 'skip_steps', 'log_steps', 'max_ckpt',
+    'shit'
 ])
 RunConfig.__new__.__defaults__ = (None, ) * len(RunConfig._fields)
 

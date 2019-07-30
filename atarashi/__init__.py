@@ -26,7 +26,8 @@ log = logging.getLogger(__name__)
 try:
     os.mkdir('./log')
 except FileExistsError:
-    pass
+    if os.path.isfile('./log'):
+        os.remove('./log')
 
 try:
     import tqdm

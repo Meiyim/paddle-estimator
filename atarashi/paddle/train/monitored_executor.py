@@ -183,6 +183,7 @@ class MonitoredExecutor(object):
         # TODO init
 
         for h in self._hooks:
+            log.debug('train loop has hook %s' % h)
             h.before_train()
         return self
 
@@ -223,6 +224,8 @@ class MonitoredExecutor(object):
         self._state = self._state.next()
 
     def __exit__(self, err_type, err_value, trace):
+        log.debug(err_type)
+        log.debug(err_type is F.core.EOFException)
         if (err_type is None) or (err_type is F.core.EOFException) or (
                 err_type is StopException) or (err_type is KeyboardInterrupt):
             try:
@@ -230,7 +233,7 @@ class MonitoredExecutor(object):
                 for h in self._hooks:
                     h.after_train()
             except Exception as e:
-                #log.exception('error occur after loop %s' % repr(e))
+                log.exception('error occur after loop %s' % repr(e))
                 raise e
         else:
             log.info('********** Interupt Loop ************')

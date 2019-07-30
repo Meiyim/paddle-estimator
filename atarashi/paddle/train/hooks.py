@@ -28,6 +28,7 @@ from tensorboardX import SummaryWriter
 
 from atarashi import util
 from atarashi.paddle.train import distribution
+from atarashi.paddle.train.metrics import Metrics
 
 log = logging.getLogger(__name__)
 
@@ -145,13 +146,13 @@ class LoggingHook(RunHook):
 
 
 class StopAtStepHook(RunHook):
-    def __init__(self, stop_global_step, stop_step):
+    def __init__(self, stop_global_step, stop_step, msg=None):
         self._stop_gstep = stop_global_step
         self._stop_step = stop_step
 
         try:
             import tqdm
-            self._tqdm = tqdm.tqdm(total=stop_global_step)
+            self._tqdm = tqdm.tqdm(total=stop_global_step, desc=msg)
         except ImportError:
             log.warning('tqdm not installed, will not show progress bar')
             self._tqdm = None
@@ -161,6 +162,10 @@ class StopAtStepHook(RunHook):
             self._tqdm.n = state.gstep
             self._tqdm.refresh()
         return []
+
+    def after_train(self):
+        if self._tqdm is not None:
+            self._tqdm.close()
 
     def should_stop(self, state):
         if (self._stop_gstep and state.gstep >= self._stop_gstep) or \
@@ -183,6 +188,12 @@ class EvalHook(RunHook):
 
         if not isinstance(metrics, dict):
             raise ValueError('metrics should be dict, got %s' % repr(metrics))
+
+        for k, m in six.iteritems(metrics):
+            if not isinstance(m, Metrics):
+                raise ValueError(
+                    'metrics %s should be instance of atarashi.Metrics, got %s'
+                    % (k, repr(m)))
 
         if len(metrics):
             self.names = list(metrics.keys())
@@ -214,7 +225,6 @@ class EvalHook(RunHook):
         return ls_flt
 
     def after_run(self, res_list, state):
-        #log.debug([np.squeeze(r)for r in res_list])
         res = util.unflatten(res_list, self.schema)
         for r, m in zip(res, self.metrics):
             m.update(r)

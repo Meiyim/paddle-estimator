@@ -238,19 +238,25 @@ def train_and_eval(model_class_or_model_fn,
                     name, eval_model_spec.metrics, board_log_dir=log_dir)
                 eval_hook.set_train_state(train_state)
                 eval_run_hooks = [eval_hook]
+                if run_config.eval_max_steps is not None:
+                    eval_run_hooks.append(
+                        hooks.StopAtStepHook(
+                            run_config.eval_max_steps,
+                            run_config.eval_max_steps,
+                            msg='evaluating %s' % name))
                 eval_run_hooks.extend(eval_hooks)
-                with ds.start(), \
-                    MonitoredExecutor(start_exe,
-                       program=program,
-                       run_config=None,
-                       run_hooks=eval_run_hooks,
-                    ) as eval_exe:
-                    while True:
-                        eval_exe.run()
+                eval_ds = ds.start()
+                with MonitoredExecutor(
+                        start_exe,
+                        program=program,
+                        run_config=None,
+                        run_hooks=eval_run_hooks, ) as eval_exe:
+                    for data in eval_ds:
+                        eval_exe.run(feed=data)
                         #log.debug('eval')
             except (F.core.EOFException, StopException):
-                log.debug('Eval dataset ran out of data')
-                return eval_hook.result
+                pass
+            return eval_hook.result
 
         log.info('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
 
@@ -313,7 +319,8 @@ def train_and_eval(model_class_or_model_fn,
             histogram=collections.get(collection.Key.SUMMARY_HISTOGRAM), )
 
         train_run_hooks = [
-            hooks.StopAtStepHook(run_config.max_steps, run_config.run_steps),
+            hooks.StopAtStepHook(
+                run_config.max_steps, run_config.run_steps, msg='training'),
             hooks.LoggingHook(
                 model_spec.loss,
                 board_log_dir=os.path.join(run_config.model_dir,
@@ -332,15 +339,15 @@ def train_and_eval(model_class_or_model_fn,
 
         train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
-        with train_dataset.start(), \
-            MonitoredExecutor(train_exe,
-               train_program,
-               state=train_init_state,
-               run_config=run_config,
-               run_hooks=train_run_hooks,
-            ) as train_exe:
-            while True:
-                train_exe.run()  # train
+        train_ds = train_dataset.start()
+        with MonitoredExecutor(
+                train_exe,
+                train_program,
+                state=train_init_state,
+                run_config=run_config,
+                run_hooks=train_run_hooks, ) as train_exe:
+            for data in train_ds:
+                train_exe.run(feed=data)  # train
                 # start eval_loop
                 if eval_dataset is not None and \
                     train_exe.state.gstep % run_config.eval_steps == 0 and \
@@ -355,4 +362,4 @@ def train_and_eval(model_class_or_model_fn,
                                         train_exe.state)
                     log.debug('eval done')
     except (F.core.EOFException, StopException):
-        log.debug('Train dataset ran out of data')
+        pass

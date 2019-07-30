@@ -31,7 +31,10 @@ class Dataset(DatasetBase):
                 types) in enumerate(zip(self.data_shapes, self.data_types)):
             ret.append(
                 L.data(
-                    str(i), shape=shape, append_batch_size=False, dtype=types))
+                    'placeholder_%d' % i,
+                    shape=shape,
+                    append_batch_size=False,
+                    dtype=types))
         return ret
 
     def features(self):
@@ -43,38 +46,19 @@ class Dataset(DatasetBase):
             raise ValueError(
                 'Dataset shapes and types not match: shape:%s types%s' %
                 (repr(self._data_shapes), repr(self._data_types)))
+        return self.placeholders()
 
-        self.pyreader = L.py_reader(
-            50,
-            shapes=self.data_shapes,
-            dtypes=self.data_types,
-            lod_levels=[0] * len(self.data_shapes),
-            name=self.name,
-            use_double_buffer=True, )
-        features = L.read_file(self.pyreader)
-        return features
-
-    def start(self):
-        assert self.pyreader is not None, 'use Dataset.features to build net first, then start dataset'
-
+    def start(self, places=F.cuda_places()):
+        #assert self.pyreader is not None, 'use Dataset.features to build net first, then start dataset'
         def gen():
             try:
-                for i in self.generator():
+                for idx, i in enumerate(self.generator()):
                     yield i
             except Exception as e:
                 log.exception(e)
+                raise e
 
-        return PyreaderContext(self.pyreader, gen)
-
-
-class PyreaderContext(object):
-    def __init__(self, pyreader, dataset):
-        pyreader.decorate_tensor_provider(dataset)
-        self._pyreader = pyreader
-
-    def __enter__(self):
-        self._pyreader.start()
-        return self
-
-    def __exit__(self, err_type, err_value, trace):
-        self._pyreader.reset()
+        r = F.io.PyReader(
+            feed_list=self.placeholders(), capacity=50, iterable=True)
+        r.decorate_batch_generator(gen, places=places)
+        return r()
