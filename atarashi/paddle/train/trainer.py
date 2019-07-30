@@ -271,6 +271,9 @@ def train_and_eval(model_class_or_model_fn,
 
     #2. restore param
     if warm_start_setting is not None:
+        if not os.path.exists(warm_start_setting.from_dir):
+            raise ValueError('warm start dir not exists: %s' %
+                             warm_start_setting.from_dir)
         log.info("warm start from %s" % warm_start_setting.from_dir)
         if warm_start_setting.predicate_fn is not None:
 

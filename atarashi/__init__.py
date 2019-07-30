@@ -28,7 +28,26 @@ try:
 except FileExistsError:
     pass
 
-stream_hdl = logging.StreamHandler()
+try:
+    import tqdm
+
+    class TqdmLoggingHandler(logging.Handler):
+        def __init__(self):
+            super().__init__()
+
+        def emit(self, record):
+            try:
+                msg = self.format(record)
+                tqdm.tqdm.write(msg)
+                self.flush()
+            except (KeyboardInterrupt, SystemExit):
+                raise
+            except:
+                self.handleError(record)
+
+    stream_hdl = TqdmLoggingHandler()
+except ImportError:
+    stream_hdl = logging.StreamHandler()
 
 if os.environ.get('OMPI_COMM_WORLD_RANK') is not None and os.environ.get(
         'OMPI_COMM_WORLD_LOCAL_RANK') is not None:
@@ -44,6 +63,7 @@ formatter = logging.Formatter(
 )
 
 file_hdl.setFormatter(formatter)
+
 try:
     from colorlog import ColoredFormatter
     fancy_formatter = ColoredFormatter(

@@ -37,7 +37,7 @@ class RunHook(object):
         pass
 
     def before_train(self):
-        log.debug('Train loop has hook %s' % self.__repr__())
+        pass
 
     def before_run(self, state):
         return []
@@ -148,6 +148,19 @@ class StopAtStepHook(RunHook):
     def __init__(self, stop_global_step, stop_step):
         self._stop_gstep = stop_global_step
         self._stop_step = stop_step
+
+        try:
+            import tqdm
+            self._tqdm = tqdm.tqdm(total=stop_global_step)
+        except ImportError:
+            log.warning('tqdm not installed, will not show progress bar')
+            self._tqdm = None
+
+    def before_run(self, state):
+        if self._tqdm is not None:
+            self._tqdm.n = state.gstep
+            self._tqdm.refresh()
+        return []
 
     def should_stop(self, state):
         if (self._stop_gstep and state.gstep >= self._stop_gstep) or \
