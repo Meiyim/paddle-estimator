@@ -26,7 +26,7 @@ import logging
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
-from atarashi.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec
+from atarashi.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec, InferenceSpec
 from atarashi.paddle import summary, collection
 from atarashi.paddle.data.functional import Dataset
 from atarashi.paddle.train import distribution
@@ -83,10 +83,17 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
             elif mode == RunMode.EVAL:
                 loss = model.loss(pred, label)
                 me = model.metrics(pred, label)
+
+                pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
+                inf_spec = InferenceSpec(inputs=fea, outputs=pred_list)
                 if 'loss' not in me:
                     me['loss'] = metrics.Mean(loss)
                 return ModelSpec(
-                    loss=loss, predictions=pred, metrics=me, mode=mode)
+                    loss=loss,
+                    predictions=pred,
+                    metrics=me,
+                    mode=mode,
+                    inference_spec=inf_spec)
             elif mode == RunMode.PREDICT:
                 return ModelSpec(predictions=pred, mode=mode)
             else:
@@ -137,13 +144,12 @@ def predict(model_class_or_model_fn,
         predicate=F.io.is_persistable)
 
     pred = model_spec.predictions
-    if not isinstance(pred, list) and not isinstance(pred, tuple):
-        pred = [pred]
+    pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
     try:
         log.info('Runining predict from dir: %s' % model_dir)
         with infer_dataset.start():
             for _ in itertools.count(steps):
-                res = start_exe.run(program, fetch_list=pred)
+                res = start_exe.run(program, fetch_list=pred_list)
                 if split_batch:
                     res = map(lambda i: i.tolist(), res)
                     res = zip(*res)  # transpose
@@ -341,7 +347,8 @@ def train_and_eval(model_class_or_model_fn,
                         ret = evaluate(name, train_exe.state)
                         eval_result[name] = ret
                     for exporter in exporters:
-                        exporter.export(start_exe, train_program, eval_result,
+                        exporter.export(start_exe, train_program,
+                                        eval_model_spec, eval_result,
                                         train_exe.state)
                     log.debug('eval done')
     except (F.core.EOFException, StopException):

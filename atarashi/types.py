@@ -35,11 +35,14 @@ RunConfig = namedtuple('RunConfig', [
 ])
 RunConfig.__new__.__defaults__ = (None, ) * len(RunConfig._fields)
 
+InferenceSpec = namedtuple('InferenceSpec', ['inputs', 'outputs'])
+
 ModelSpec = namedtuple('ModelSpec', [
     'loss',
     'predictions',
     'metrics',
     'mode',
+    'inference_spec',
 ])
 ModelSpec.__new__.__defaults__ = (None, ) * len(ModelSpec._fields)
 
