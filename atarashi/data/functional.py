@@ -186,6 +186,8 @@ class Dataset(object):
 
     @classmethod
     def from_file(cls, filename):
+        if os.path.getsize(filename) == 0:
+            raise RuntimeError('%s is empty' % filename)
         gen = open_file(filename)
         ret = cls()
         ret.generator = gen
@@ -195,6 +197,8 @@ class Dataset(object):
 
     @classmethod
     def from_gz_file(cls, filename):
+        if os.path.getsize(filename) == 0:
+            raise RuntimeError('%s is empty' % filename)
         gen = open_gz(filename)
         ret = cls()
         ret.generator = gen
