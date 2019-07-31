@@ -99,13 +99,13 @@ def interleave_func(iterable, map_fn, cycle_length, block_length):
 
 
 def repeat_func(dataset, n):
-    iterable = dataset()
-    if n >= 0:
-        ret = itertools.chain(*itertools.tee(iterable, n))
-    else:
-        ret = itertools.cycle(iterable)
-
     def gen():
+        iterable = dataset()
+        if n >= 0:
+            ret = itertools.chain(*itertools.tee(iterable, n))
+        else:
+            ret = itertools.cycle(iterable)
+
         for i in ret:
             yield i
 
@@ -137,10 +137,19 @@ def map_func(dataset, fn):
 
 
 def shard_func(dataset, num_shards, index):
-    iterable = dataset()
-    ret = itertools.islice(iterable, index, None, num_shards)
-
     def gen():
+        iterable = dataset()
+        ret = itertools.islice(iterable, index, None, num_shards)
+        for i in ret:
+            yield i
+
+    return gen
+
+
+def take_func(dataset, count):
+    def gen():
+        iterable = dataset()
+        ret = itertools.islice(iterable, count)
         for i in ret:
             yield i
 
@@ -325,4 +334,8 @@ class Dataset(object):
     def padded_batch(self, batch_size, pad_value=0):
         func = functools.partial(
             padded_batch_func, batch_size=batch_size, pad_value=pad_value)
+        return self.apply(func)
+
+    def take(self, count=1):
+        func = functools.partial(take_func, count=count)
         return self.apply(func)
