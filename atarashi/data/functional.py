@@ -99,13 +99,13 @@ def interleave_func(iterable, map_fn, cycle_length, block_length):
 
 
 def repeat_func(dataset, n):
-    iterable = dataset()
-    if n >= 0:
-        ret = itertools.chain(*itertools.tee(iterable, n))
-    else:
-        ret = itertools.cycle(iterable)
-
     def gen():
+        iterable = dataset()
+        if n >= 0:
+            ret = itertools.chain(*itertools.tee(iterable, n))
+        else:
+            ret = itertools.cycle(iterable)
+
         for i in ret:
             yield i
 
@@ -137,10 +137,9 @@ def map_func(dataset, fn):
 
 
 def shard_func(dataset, num_shards, index):
-    iterable = dataset()
-    ret = itertools.islice(iterable, index, None, num_shards)
-
     def gen():
+        iterable = dataset()
+        ret = itertools.islice(iterable, index, None, num_shards)
         for i in ret:
             yield i
 
@@ -148,10 +147,9 @@ def shard_func(dataset, num_shards, index):
 
 
 def take_func(dataset, count):
-    iterable = dataset()
-    ret = itertools.islice(iterable, count)
-
     def gen():
+        iterable = dataset()
+        ret = itertools.islice(iterable, count)
         for i in ret:
             yield i
 
