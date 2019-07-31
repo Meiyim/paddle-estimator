@@ -145,10 +145,14 @@ def predict(model_class_or_model_fn,
 
     pred = model_spec.predictions
     pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
+
+    dev_list = F.cuda_places()  #list all visible divices
+    predict_exe = get_parallel_exe(program, model_spec.predictions,
+                                   len(dev_list))
     try:
         log.info('Runining predict from dir: %s' % model_dir)
-        for data in infer_dataset.start():
-            res = start_exe.run(program, fetch_list=pred_list, feed=data)
+        for data in infer_dataset.start(dev_list):
+            res = predict_exe.run(fetch_list=pred_list, feed=data)
             if split_batch:
                 res = map(lambda i: i.tolist(), res)
                 res = zip(*res)  # transpose
