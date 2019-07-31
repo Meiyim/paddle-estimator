@@ -147,16 +147,15 @@ def predict(model_class_or_model_fn,
     pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
     try:
         log.info('Runining predict from dir: %s' % model_dir)
-        with infer_dataset.start():
-            for _ in itertools.count(steps):
-                res = start_exe.run(program, fetch_list=pred_list)
-                if split_batch:
-                    res = map(lambda i: i.tolist(), res)
-                    res = zip(*res)  # transpose
-                    for r in res:
-                        yield r
-                else:
-                    yield res
+        for data in infer_dataset.start():
+            res = start_exe.run(program, fetch_list=pred_list, feed=data)
+            if split_batch:
+                res = map(lambda i: i.tolist(), res)
+                res = zip(*res)  # transpose
+                for r in res:
+                    yield r
+            else:
+                yield res
     except F.core.EOFException:
         log.debug('Predict done')
 
