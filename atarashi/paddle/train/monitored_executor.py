@@ -62,8 +62,11 @@ class RunState(object):
     def time(self):
         return self._time
 
+    def __repr__(self):
+        return repr({'global_step': self._gstep, 'time': self._time})
+
     def serialize(self):
-        return json.dumps({'global_step': self._step, 'time': self._time})
+        return json.dumps({'global_step': self._gstep, 'time': self._time})
 
     def next(self):
         ret = RunState()
@@ -97,7 +100,7 @@ class Saver(object):
             self.ckpt_list = [
                 p.strip() for p in open(self.ckpt_info_path).readlines()
             ]
-            log.debug(self.ckpt_list)
+            log.debug('ckpt_list in this Saver: %s' % (self.ckpt_list))
         else:
             self.ckpt_list = []
 
@@ -108,8 +111,15 @@ class Saver(object):
     def save(self, state):
         save_name = '%s_%d' % (self._save_prefix, state.gstep)
         save_dir = os.path.join(self._save_dir, save_name)
+        tmp_dir = os.path.join(self._save_dir, 'tmp')
+        try:
+            shutil.rmtree(save_dir)
+            shutil.rmtree(tmp_dir)
+        except FileNotFoundError:
+            pass
         log.info('saving step %d to %s' % (state.gstep, save_dir))
-        F.io.save_persistables(self._exe, save_dir, self._program)
+        F.io.save_persistables(self._exe, tmp_dir, self._program)
+        shutil.move(tmp_dir, save_dir)
         meta = state.serialize()
         open(os.path.join(save_dir, 'meta'), 'w').write(meta)
 
@@ -130,7 +140,11 @@ class Saver(object):
         assert abs(ckpt) <= len(
             self.ckpt_list), 'invalid restore ckpt number %d' % ckpt
         path = os.path.join(self._save_dir, self.ckpt_list[ckpt])
-        log.info('restore from ckpt %s' % path)
+        meta_file = os.path.join(path, 'meta')
+        if not os.path.exists(meta_file):
+            raise RuntimeError('meta not found in restore dir: %s' % path)
+        state = RunState.from_str(open(meta_file).read())
+        log.info('restore from ckpt %s, ckpt-status: %s' % (path, repr(state)))
 
         def fn(v):
             vpath = os.path.join(path, v.name)
@@ -144,9 +158,6 @@ class Saver(object):
 
         F.io.load_vars(
             self._exe, path, main_program=self._program, predicate=fn)
-
-        meta_file = os.path.join(path, 'meta')
-        state = RunState.from_str(open(meta_file).read())
         return state
 
 
@@ -224,8 +235,6 @@ class MonitoredExecutor(object):
         self._state = self._state.next()
 
     def __exit__(self, err_type, err_value, trace):
-        log.debug(err_type)
-        log.debug(err_type is F.core.EOFException)
         if (err_type is None) or (err_type is F.core.EOFException) or (
                 err_type is StopException) or (err_type is KeyboardInterrupt):
             try:

@@ -31,6 +31,9 @@ class HParams(object):
         for k, v in kwargs.items():
             self.__dict__[k] = v
 
+    def __contains__(self, key):
+        return key in self.__dict__
+
     def __getitem__(self, key):
         if key not in self.__dict__:
             raise ValueError('key(%s) not in HParams.' % key)
@@ -42,6 +45,9 @@ class HParams(object):
         if type(d) != dict:
             raise ValueError('json object must be dict.')
         return HParams.from_dict(d)
+
+    def get(self, key, default=None):
+        return self.__dict__.get(key, default)
 
     @staticmethod
     def from_dict(self, d):
