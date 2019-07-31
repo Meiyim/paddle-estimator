@@ -147,6 +147,17 @@ def shard_func(dataset, num_shards, index):
     return gen
 
 
+def take_func(dataset, count):
+    iterable = dataset()
+    ret = itertools.islice(iterable, count)
+
+    def gen():
+        for i in ret:
+            yield i
+
+    return gen
+
+
 def padded_batch_func(dataset, batch_size, pad_value=0):
     def gen():
         iterable = dataset()
@@ -325,4 +336,8 @@ class Dataset(object):
     def padded_batch(self, batch_size, pad_value=0):
         func = functools.partial(
             padded_batch_func, batch_size=batch_size, pad_value=pad_value)
+        return self.apply(func)
+
+    def take(self, count=1):
+        func = functools.partial(take_func, count=count)
         return self.apply(func)
