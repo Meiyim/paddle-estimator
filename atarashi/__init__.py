@@ -80,4 +80,4 @@ log.addHandler(file_hdl)
 #log.propagate = False
 
 from atarashi.types import *
-from atarashi.util import ArgumentParser, parse_hparam, parse_runconfig
+from atarashi.util import ArgumentParser, parse_hparam, parse_runconfig, parse_file
