@@ -16,6 +16,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import os
+import sys
 import logging
 import six
 from time import time
@@ -39,7 +40,7 @@ try:
         def emit(self, record):
             try:
                 msg = self.format(record)
-                tqdm.tqdm.write(msg)
+                tqdm.tqdm.write(msg, file=sys.stderr)
                 self.flush()
             except (KeyboardInterrupt, SystemExit):
                 raise
@@ -48,7 +49,7 @@ try:
 
     stream_hdl = TqdmLoggingHandler()
 except ImportError:
-    stream_hdl = logging.StreamHandler()
+    stream_hdl = logging.StreamHandler(stream=sys.stderr)
 
 if os.environ.get('OMPI_COMM_WORLD_RANK') is not None and os.environ.get(
         'OMPI_COMM_WORLD_LOCAL_RANK') is not None:
