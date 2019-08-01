@@ -148,7 +148,7 @@ def predict(model_class_or_model_fn,
     pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
     try:
         log.info('Runining predict from dir: %s' % model_dir)
-        for data in infer_dataset.start():
+        for data in infer_dataset.start(places=[F.CUDAPlace(0)]):
             res = start_exe.run(program, fetch_list=pred_list, feed=data)
             if split_batch:
                 res = map(lambda i: i.tolist(), res)
@@ -245,7 +245,7 @@ def train_and_eval(model_class_or_model_fn,
                             run_config.eval_max_steps,
                             msg='evaluating %s' % name))
                 eval_run_hooks.extend(eval_hooks)
-                eval_ds = ds.start()
+                eval_ds = ds.start(places=[single_card_place])
                 with MonitoredExecutor(
                         start_exe,
                         program=program,
@@ -339,14 +339,13 @@ def train_and_eval(model_class_or_model_fn,
 
         train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
-        train_ds = train_dataset.start()
         with MonitoredExecutor(
                 train_exe,
                 train_program,
                 state=train_init_state,
                 run_config=run_config,
                 run_hooks=train_run_hooks, ) as train_exe:
-            for data in train_ds:
+            for data in train_dataset.start():
                 train_exe.run(feed=data)  # train
                 # start eval_loop
                 if eval_dataset is not None and \
