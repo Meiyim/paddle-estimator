@@ -24,28 +24,7 @@ from time import time
 __version__ = '0.1'
 
 log = logging.getLogger(__name__)
-
-try:
-    import tqdm
-
-    class TqdmLoggingHandler(logging.Handler):
-        def __init__(self):
-            super().__init__()
-
-        def emit(self, record):
-            try:
-                msg = self.format(record)
-                tqdm.tqdm.write(msg, file=sys.stderr)
-                self.flush()
-            except (KeyboardInterrupt, SystemExit):
-                raise
-            except:
-                self.handleError(record)
-
-    stream_hdl = TqdmLoggingHandler()
-except ImportError:
-    stream_hdl = logging.StreamHandler(stream=sys.stderr)
-
+stream_hdl = logging.StreamHandler(stream=sys.stderr)
 formatter = logging.Formatter(
     fmt='[%(levelname)s] %(asctime)s [%(filename)12s:%(lineno)5d]:\t%(message)s'
 )

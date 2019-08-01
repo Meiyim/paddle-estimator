@@ -42,31 +42,6 @@ log = logging.getLogger(__name__)
 __all__ = ['train_and_eval', 'predict']
 
 
-def prepare_logger():
-    from atarashi.paddle.train import log as trainlog
-    if os.path.isfile('./log'):
-        log.warning("`./log' is not emty, will not save train log to file")
-        return
-    try:
-        os.mkdir('./log')
-    except FileExistsError:
-        pass
-
-    if os.environ.get('OMPI_COMM_WORLD_RANK') is not None and os.environ.get(
-            'OMPI_COMM_WORLD_LOCAL_RANK') is not None:
-        rank = os.environ['OMPI_COMM_WORLD_RANK']
-        local_rank = os.environ['OMPI_COMM_WORLD_LOCAL_RANK']
-        filename = '%d.%s.%s.log' % (int(time()), rank, local_rank)
-    else:
-        filename = '%d.log' % int(time())
-    file_hdl = logging.FileHandler(os.path.join('./log', filename), mode='w')
-    formatter = logging.Formatter(
-        fmt='[%(levelname)s] %(asctime)s [%(filename)12s:%(lineno)5d]:\t%(message)s'
-    )
-    file_hdl.setFormatter(formatter)
-    trainlog.addHandler(file_hdl)
-
-
 def get_parallel_exe(program, loss, dev_count):
     exec_strategy = F.ExecutionStrategy()
     exec_strategy.num_threads = 4  #2 for fp32 4 for fp16
@@ -195,8 +170,6 @@ def train_and_eval(model_class_or_model_fn,
                    train_hooks=[],
                    eval_hooks=[],
                    exporters=[]):
-    prepare_logger()
-
     train_program = F.Program()
     startup_prog = F.Program()
     with F.program_guard(train_program, startup_prog):
