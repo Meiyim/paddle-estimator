@@ -24,47 +24,10 @@ from time import time
 __version__ = '0.1'
 
 log = logging.getLogger(__name__)
-try:
-    os.mkdir('./log')
-except FileExistsError:
-    if os.path.isfile('./log'):
-        os.remove('./log')
-
-try:
-    import tqdm
-
-    class TqdmLoggingHandler(logging.Handler):
-        def __init__(self):
-            super().__init__()
-
-        def emit(self, record):
-            try:
-                msg = self.format(record)
-                tqdm.tqdm.write(msg, file=sys.stderr)
-                self.flush()
-            except (KeyboardInterrupt, SystemExit):
-                raise
-            except:
-                self.handleError(record)
-
-    stream_hdl = TqdmLoggingHandler()
-except ImportError:
-    stream_hdl = logging.StreamHandler(stream=sys.stderr)
-
-if os.environ.get('OMPI_COMM_WORLD_RANK') is not None and os.environ.get(
-        'OMPI_COMM_WORLD_LOCAL_RANK') is not None:
-    rank = os.environ['OMPI_COMM_WORLD_RANK']
-    local_rank = os.environ['OMPI_COMM_WORLD_LOCAL_RANK']
-    filename = '%d.%s.%s.log' % (int(time()), rank, local_rank)
-else:
-    filename = '%d.log' % int(time())
-file_hdl = logging.FileHandler(os.path.join('./log', filename), mode='w')
-
+stream_hdl = logging.StreamHandler(stream=sys.stderr)
 formatter = logging.Formatter(
     fmt='[%(levelname)s] %(asctime)s [%(filename)12s:%(lineno)5d]:\t%(message)s'
 )
-
-file_hdl.setFormatter(formatter)
 
 try:
     from colorlog import ColoredFormatter
@@ -77,7 +40,6 @@ except ImportError:
 
 log.setLevel(logging.DEBUG)
 log.addHandler(stream_hdl)
-log.addHandler(file_hdl)
 #log.propagate = False
 
 from atarashi.types import *

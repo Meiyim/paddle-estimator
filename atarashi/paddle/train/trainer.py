@@ -22,6 +22,7 @@ import inspect
 from contextlib import contextmanager
 from six.moves import zip, map
 import logging
+from time import time
 
 import paddle.fluid as F
 import paddle.fluid.layers as L

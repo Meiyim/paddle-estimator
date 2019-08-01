@@ -36,10 +36,8 @@ def ArgumentParser(name):
     return parser
 
 
-def _get_dict_from_environ_or_json_or_file(args, env_name=None):
+def _get_dict_from_environ_or_json_or_file(args, env_name):
     if args is None:
-        if env_name is None:
-            raise ValueError('args and env_name should be set at least one')
         s = os.environ.get(env_name)
     else:
         s = args
@@ -57,7 +55,7 @@ def _get_dict_from_environ_or_json_or_file(args, env_name=None):
 
 
 def parse_file(filename):
-    d = _get_dict_from_environ_or_json_or_file(filename)
+    d = _get_dict_from_environ_or_json_or_file(filename, None)
     if d is None:
         raise ValueError('file(%s) not found' % filename)
     return d

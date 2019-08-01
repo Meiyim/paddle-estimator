@@ -16,6 +16,13 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
+import os
+import sys
+import logging
+from time import time
+
+log = logging.getLogger(__name__)
+
 from atarashi.paddle.train.monitored_executor import *
 from atarashi.paddle.train.trainer import *
 from atarashi.train.model import Model
