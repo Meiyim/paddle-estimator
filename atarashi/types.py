@@ -39,6 +39,9 @@ class HParams(object):
             raise ValueError('key(%s) not in HParams.' % key)
         return self.__dict__[key]
 
+    def __setitem__(self, key, val):
+        self.__dict__[key] = val
+
     @staticmethod
     def from_json(self, json_str):
         d = json.loads(json_str)
