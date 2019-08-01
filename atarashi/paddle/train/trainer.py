@@ -155,8 +155,8 @@ def predict(model_class_or_model_fn,
     dev_list = F.cuda_places()  #list all visible divices
     if len(dev_list) > 1:
         log.warm(
-            'PyReader drop last batch, because number of devices is %s > 1.' %
-            len(dev_list))
+            'Executing multi card prediction, No. of cards: %d > 1. will drop remainder'
+            % len(dev_list))
     predict_exe = get_parallel_exe(program, model_spec.predictions,
                                    len(dev_list))
     try:
@@ -258,7 +258,7 @@ def train_and_eval(model_class_or_model_fn,
                             run_config.eval_max_steps,
                             msg='evaluating %s' % name))
                 eval_run_hooks.extend(eval_hooks)
-                eval_ds = ds.start()
+                eval_ds = ds.start(places=[single_card_place])
                 with MonitoredExecutor(
                         start_exe,
                         program=program,
@@ -352,14 +352,13 @@ def train_and_eval(model_class_or_model_fn,
 
         train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
-        train_ds = train_dataset.start()
         with MonitoredExecutor(
                 train_exe,
                 train_program,
                 state=train_init_state,
                 run_config=run_config,
                 run_hooks=train_run_hooks, ) as train_exe:
-            for data in train_ds:
+            for data in train_dataset.start():
                 train_exe.run(feed=data)  # train
                 # start eval_loop
                 if eval_dataset is not None and \
