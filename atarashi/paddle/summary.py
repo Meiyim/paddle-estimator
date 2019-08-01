@@ -17,17 +17,19 @@ from __future__ import unicode_literals
 
 import sys
 
-from .collection import add_to, get_from
-
-KEY_SUMMARY_SCALAR = 1
-KEY_SUMMARY_HISTOGRAM = 2
+import paddle.fluid as F
+from atarashi.paddle.collection import default_collection, Key
 
 
 def scalar(name, tensor):
+    if not isinstance(tensor, F.framework.Variable):
+        raise ValueError('expect paddle Variable, got %s' % tensor)
     tensor.persistable = True
-    add_to(KEY_SUMMARY_SCALAR, (name, tensor.name))
+    default_collection().add(Key.SUMMARY_SCALAR, (name, tensor))
 
 
 def histogram(name, tensor):
+    if not isinstance(tensor, F.framework.Variable):
+        raise ValueError('expect paddle Variable, got %s' % tensor)
     tensor.persistable = True
-    add_to(KEY_SUMMARY_HISTOGRAM, (name, tensor.name))
+    default_collection().add(Key.SUMMARY_HISTOGRAM, (name, tensor))

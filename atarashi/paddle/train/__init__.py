@@ -16,10 +16,17 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from .monitored_executor import *
-from .trainer import *
-from .model import Model
-from . import exporter
-from . import distribution
-from . import hooks
-from . import metrics
+import os
+import sys
+import logging
+from time import time
+
+log = logging.getLogger(__name__)
+
+from atarashi.paddle.train.monitored_executor import *
+from atarashi.paddle.train.trainer import *
+from atarashi.train.model import Model
+from atarashi.paddle.train import exporter
+from atarashi.paddle.train import distribution
+from atarashi.paddle.train import hooks
+from atarashi.paddle.train import metrics

@@ -16,6 +16,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import os
+import json
 from collections import namedtuple
 
 
@@ -25,21 +26,71 @@ class RunMode(object):
     EVAL = 3
 
 
+class HParams(object):
+    def __init__(self, **kwargs):
+        for k, v in kwargs.items():
+            self.__dict__[k] = v
+
+    def __contains__(self, key):
+        return key in self.__dict__
+
+    def __getitem__(self, key):
+        if key not in self.__dict__:
+            raise ValueError('key(%s) not in HParams.' % key)
+        return self.__dict__[key]
+
+    def __setitem__(self, key, val):
+        self.__dict__[key] = val
+
+    @staticmethod
+    def from_json(self, json_str):
+        d = json.loads(json_str)
+        if type(d) != dict:
+            raise ValueError('json object must be dict.')
+        return HParams.from_dict(d)
+
+    def get(self, key, default=None):
+        return self.__dict__.get(key, default)
+
+    @staticmethod
+    def from_dict(self, d):
+        if type(d) != dict:
+            raise ValueError('input must be dict.')
+        hp = HParams(**d)
+        return hp
+
+    def to_json(self):
+        return json.dumps(self.__dict__)
+
+    def to_dict(self):
+        return self.__dict__
+
+    def join(self, other):
+        if not isinstance(other, HParams):
+            raise ValueError('input must be HParams instance.')
+        self.__dict__.update(**other.__dict__)
+        return self
+
+
 SummaryRecord = namedtuple('SummaryRecord', ['scalar', 'histogram'])
 
 WarmStartSetting = namedtuple('WarmStartSetting', ['predicate_fn', 'from_dir'])
 
 RunConfig = namedtuple('RunConfig', [
-    'batch_size', 'model_dir', 'max_steps', 'save_steps', 'eval_steps',
-    'skip_steps', 'log_steps', 'run_steps', 'max_ckpt', 'shit'
+    'batch_size', 'model_dir', 'run_steps', 'max_steps', 'save_steps',
+    'eval_steps', 'eval_max_steps', 'skip_steps', 'log_steps', 'max_ckpt',
+    'shit'
 ])
 RunConfig.__new__.__defaults__ = (None, ) * len(RunConfig._fields)
+
+InferenceSpec = namedtuple('InferenceSpec', ['inputs', 'outputs'])
 
 ModelSpec = namedtuple('ModelSpec', [
     'loss',
     'predictions',
     'metrics',
     'mode',
+    'inference_spec',
 ])
 ModelSpec.__new__.__defaults__ = (None, ) * len(ModelSpec._fields)
 

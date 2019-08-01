@@ -21,12 +21,16 @@ import os
 import itertools
 
 import numpy as np
+import logging
 import paddle.fluid as F
 import paddle.fluid.layers as L
 from tensorboardX import SummaryWriter
 
-from atarashi import log
 from atarashi import util
+from atarashi.paddle.train import distribution
+from atarashi.paddle.train.metrics import Metrics
+
+log = logging.getLogger(__name__)
 
 
 class RunHook(object):
@@ -34,7 +38,7 @@ class RunHook(object):
         pass
 
     def before_train(self):
-        log.info('Train loop has hook %s' % self.__repr__())
+        pass
 
     def before_run(self, state):
         return []
@@ -77,7 +81,10 @@ class LoggingHook(RunHook):
             else:
                 self.h_name, self.h_tolog = [], []
 
-        self.writer = SummaryWriter(self.board_log_dir)
+        if distribution.status.is_master:
+            self.writer = SummaryWriter(self.board_log_dir)
+        else:
+            self.writer = None
 
     def before_run(self, state):
         if state.gstep % self.per_step == 0 and state.step > self.skip_step:
@@ -91,14 +98,24 @@ class LoggingHook(RunHook):
 
     def after_run(self, res_list, state):
         if state.gstep % self.per_step == 0 and state.step > self.skip_step:
+            if not self.summary_record:
+                return
+
             loss = float(res_list[0])
-            if self.summary_record:
+            s_np = res_list[1:1 + len(self.s_name)]
+            h_np = res_list[1 + len(self.s_name):1 + len(self.s_name) + len(
+                self.h_name)]
+
+            if self.last_state is not None:
+                speed = (state.gstep - self.last_state.gstep) / (
+                    state.time - self.last_state.time)
+            else:
+                speed = -1.
+            self.last_state = state
+
+            # log to tensorboard
+            if self.writer is not None:
                 self.writer.add_scalar('loss', loss, state.gstep)
-
-                s_np = res_list[1:1 + len(self.s_name)]
-                h_np = res_list[1 + len(self.s_name):1 + len(self.s_name) +
-                                len(self.h_name)]
-
                 for name, t in zip(self.s_name, s_np):
                     if np.isnan(t).any():
                         log.warning('Nan summary: %s, skip' % name)
@@ -111,17 +128,11 @@ class LoggingHook(RunHook):
                     else:
                         self.writer.add_histogram(name, t, state.gstep)
 
-            if self.last_state is not None:
-                speed = (state.gstep - self.last_state.gstep) / (
-                    state.time - self.last_state.time)
-            else:
-                speed = -1.
+                if speed > 0.:
+                    self.writer.add_scalar('global_step', speed, state.gstep)
 
-            if speed > 0.:
-                self.writer.add_scalar('global_step', speed, state.gstep)
-            self.last_state = state
-
-            log.info('\t'.join([
+            # log to stdout
+            log.debug('\t'.join([
                 'step: %d' % state.gstep,
                 'steps/sec: %.5f' % speed,
                 'loss: %.5f' % loss,
@@ -135,7 +146,11 @@ class LoggingHook(RunHook):
 
 
 class StopAtStepHook(RunHook):
-    def __init__(self, stop_global_step, stop_step):
+    def __init__(self,
+                 stop_global_step,
+                 stop_step,
+                 msg=None,
+                 show_progress_bar=False):
         self._stop_gstep = stop_global_step
         self._stop_step = stop_step
 
@@ -160,6 +175,12 @@ class EvalHook(RunHook):
 
         if not isinstance(metrics, dict):
             raise ValueError('metrics should be dict, got %s' % repr(metrics))
+
+        for k, m in six.iteritems(metrics):
+            if not isinstance(m, Metrics):
+                raise ValueError(
+                    'metrics %s should be instance of atarashi.Metrics, got %s'
+                    % (k, repr(m)))
 
         if len(metrics):
             self.names = list(metrics.keys())
@@ -191,7 +212,6 @@ class EvalHook(RunHook):
         return ls_flt
 
     def after_run(self, res_list, state):
-        #log.debug([np.squeeze(r)for r in res_list])
         res = util.unflatten(res_list, self.schema)
         for r, m in zip(res, self.metrics):
             m.update(r)

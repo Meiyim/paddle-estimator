@@ -21,18 +21,23 @@ import six
 import inspect
 from contextlib import contextmanager
 from six.moves import zip, map
+import logging
+from time import time
 
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
-from atarashi.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec
-from atarashi.paddle import train, summary, data, collection
+from atarashi.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec, InferenceSpec
+from atarashi.paddle import summary, collection
+from atarashi.paddle.data.functional import Dataset
 from atarashi.paddle.train import distribution
-from . import hooks, metrics
+from atarashi.train.model import Model
+from atarashi.paddle.train.monitored_executor import Saver
+from atarashi.paddle.train import hooks, metrics
 
-from .monitored_executor import MonitoredExecutor
+from atarashi.paddle.train.monitored_executor import MonitoredExecutor
 
-from atarashi import log
+log = logging.getLogger(__name__)
 
 __all__ = ['train_and_eval', 'predict']
 
@@ -45,22 +50,23 @@ def get_parallel_exe(program, loss, dev_count):
 
     build_strategy = F.BuildStrategy()
     build_strategy.remove_unnecessary_lock = False
+    #build_strategy.fuse_broadcast_ops = True
 
-    log.debug('replica id %d of %d' % (distribution.status.replica_id,
-                                       distribution.status.num_replica))
+    log.info('replica id %d of %d' % (distribution.status.replica_id,
+                                      distribution.status.num_replica))
     train_exe = F.ParallelExecutor(
         use_cuda=True,
         loss_name=loss.name,
         build_strategy=build_strategy,
         exec_strategy=exec_strategy,
         main_program=program,
-        num_trainers=train.distribution.status.num_replica,
-        trainer_id=train.distribution.status.replica_id)
+        num_trainers=distribution.status.num_replica,
+        trainer_id=distribution.status.replica_id)
     return train_exe
 
 
 def build_net(model_fn_or_model, features, mode, params, run_config):
-    if issubclass(model_fn_or_model, train.Model):
+    if issubclass(model_fn_or_model, Model):
 
         def model_fn(features, mode, params, run_config):
             if mode != RunMode.PREDICT:
@@ -78,10 +84,17 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
             elif mode == RunMode.EVAL:
                 loss = model.loss(pred, label)
                 me = model.metrics(pred, label)
+
+                pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
+                inf_spec = InferenceSpec(inputs=fea, outputs=pred_list)
                 if 'loss' not in me:
                     me['loss'] = metrics.Mean(loss)
                 return ModelSpec(
-                    loss=loss, predictions=pred, metrics=me, mode=mode)
+                    loss=loss,
+                    predictions=pred,
+                    metrics=me,
+                    mode=mode,
+                    inference_spec=inf_spec)
             elif mode == RunMode.PREDICT:
                 return ModelSpec(predictions=pred, mode=mode)
             else:
@@ -132,20 +145,18 @@ def predict(model_class_or_model_fn,
         predicate=F.io.is_persistable)
 
     pred = model_spec.predictions
-    if not isinstance(pred, list) and not isinstance(pred, tuple):
-        pred = [pred]
+    pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
     try:
         log.info('Runining predict from dir: %s' % model_dir)
-        with infer_dataset.start():
-            for _ in itertools.count(steps):
-                res = start_exe.run(program, fetch_list=pred)
-                if split_batch:
-                    res = map(lambda i: i.tolist(), res)
-                    res = zip(*res)  # transpose
-                    for r in res:
-                        yield r
-                else:
-                    yield res
+        for data in infer_dataset.start():
+            res = start_exe.run(program, fetch_list=pred_list, feed=data)
+            if split_batch:
+                res = map(lambda i: i.tolist(), res)
+                res = zip(*res)  # transpose
+                for r in res:
+                    yield r
+            else:
+                yield res
     except F.core.EOFException:
         log.debug('Predict done')
 
@@ -164,36 +175,43 @@ def train_and_eval(model_class_or_model_fn,
     with F.program_guard(train_program, startup_prog):
         with F.unique_name.guard():
             with collection.Collections() as collections:
-                log.info('Building Train Graph')
+                log.info('Building Train Graph...')
                 fea = train_dataset.features()
                 model_spec = build_net(model_class_or_model_fn, fea,
                                        RunMode.TRAIN, params, run_config)
+                log.info('Building Train Graph: Done')
 
-            scalars = collections.get_from(summary.KEY_SUMMARY_SCALAR)
-            histograms = collections.get_from(summary.KEY_SUMMARY_HISTOGRAM)
+            scalars = collections.get(collection.Key.SUMMARY_SCALAR)
+            histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
+            skip_optimize_ops = collections.get(collection.Key.SKIP_OPTIMIZE)
             skip_opt = set()
+            if skip_optimize_ops is not None:
+                skip_opt |= set(skip_optimize_ops)
             if scalars is not None:
                 skip_opt |= {t for _, t in scalars}
             if histograms is not None:
                 skip_opt |= {t for _, t in histograms}
+            skip_opt = list(skip_opt)
+            log.debug('skip memory optimize for %d ops' % len(skip_opt))
+            log.debug('Memory optimizing...')
             F.memory_optimize(
-                input_program=train_program, skip_opt_set=list(skip_opt))
-            log.info('Done')
+                input_program=train_program, skip_opt_set=skip_opt)
+            log.debug('Memory optimizing: Done')
 
-    log.debug(
+    log.info(
         'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
         % (repr(run_config), repr(params), repr(model_spec)))
 
     #init distribution env if envvir ATARASHI_DISCONFIG is set
-    train.distribution.init_distribuition_env(train_program, startup_prog)
+    distribution.init_distribuition_env(train_program, startup_prog)
 
     if eval_dataset is not None:
         if not (isinstance(eval_dataset, dict) or isinstance(eval_dataset,
-                                                             data.Dataset)):
+                                                             Dataset)):
             raise ValueError(
-                'Eval dataset should be atarashi.data.Dataset of a list of that, got: %s'
+                'Eval dataset should be atarashi.Dataset of a list of that, got: %s'
                 % eval_dataset)
-        if isinstance(eval_dataset, data.Dataset):
+        if isinstance(eval_dataset, Dataset):
             eval_dataset = {'eval': eval_dataset}
         eval_program = {}
         for name, ds in six.iteritems(eval_dataset):
@@ -220,24 +238,30 @@ def train_and_eval(model_class_or_model_fn,
                     name, eval_model_spec.metrics, board_log_dir=log_dir)
                 eval_hook.set_train_state(train_state)
                 eval_run_hooks = [eval_hook]
+                if run_config.eval_max_steps is not None:
+                    eval_run_hooks.append(
+                        hooks.StopAtStepHook(
+                            run_config.eval_max_steps,
+                            run_config.eval_max_steps,
+                            msg='evaluating %s' % name))
                 eval_run_hooks.extend(eval_hooks)
-                with ds.start(), \
-                    MonitoredExecutor(start_exe,
-                       program=program,
-                       run_config=None,
-                       run_hooks=eval_run_hooks,
-                    ) as eval_exe:
-                    while True:
-                        eval_exe.run()
+                eval_ds = ds.start()
+                with MonitoredExecutor(
+                        start_exe,
+                        program=program,
+                        run_config=None,
+                        run_hooks=eval_run_hooks, ) as eval_exe:
+                    for data in eval_ds:
+                        eval_exe.run(feed=data)
                         #log.debug('eval')
             except (F.core.EOFException, StopException):
-                log.debug('Eval dataset ran out of data')
-                return eval_hook.result
+                pass
+            return eval_hook.result
 
-        log.debug('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
+        log.info('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
 
     dev_list = F.cuda_places()  #list all visible divices
-    log.debug('Visible device %s' % repr(dev_list))
+    log.info('Visible device %s' % repr(dev_list))
     #dev_list = [int(i) for i in os.environ.get('FLAGS_selected_gpus').split(',')]
     #log.debug('GPU list is specified %s' % repr(dev_list))
     #dev_count = len(dev_list)
@@ -253,13 +277,16 @@ def train_and_eval(model_class_or_model_fn,
 
     #2. restore param
     if warm_start_setting is not None:
+        if not os.path.exists(warm_start_setting.from_dir):
+            raise ValueError('warm start dir not exists: %s' %
+                             warm_start_setting.from_dir)
         log.info("warm start from %s" % warm_start_setting.from_dir)
         if warm_start_setting.predicate_fn is not None:
 
             def fn(v):
                 ret = warm_start_setting.predicate_fn(v)
                 if ret:
-                    log.debug('warm start: %s' % v.name)
+                    log.info('warm start: %s' % v.name)
                 return ret
 
             F.io.load_vars(
@@ -270,7 +297,7 @@ def train_and_eval(model_class_or_model_fn,
         else:
             raise NotImplementedError()
 
-    saver = train.Saver(
+    saver = Saver(
         run_config.model_dir,
         start_exe,
         program=train_program,
@@ -288,11 +315,12 @@ def train_and_eval(model_class_or_model_fn,
 
     try:  #[try -> with -> while]
         summary_record = SummaryRecord(
-            scalar=collections.get_from(summary.KEY_SUMMARY_SCALAR),
-            histogram=collections.get_from(summary.KEY_SUMMARY_HISTOGRAM), )
+            scalar=collections.get(collection.Key.SUMMARY_SCALAR),
+            histogram=collections.get(collection.Key.SUMMARY_HISTOGRAM), )
 
         train_run_hooks = [
-            hooks.StopAtStepHook(run_config.max_steps, run_config.run_steps),
+            hooks.StopAtStepHook(
+                run_config.max_steps, run_config.run_steps, msg='training'),
             hooks.LoggingHook(
                 model_spec.loss,
                 board_log_dir=os.path.join(run_config.model_dir,
@@ -311,15 +339,15 @@ def train_and_eval(model_class_or_model_fn,
 
         train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
-        with train_dataset.start(), \
-            MonitoredExecutor(train_exe,
-               train_program,
-               state=train_init_state,
-               run_config=run_config,
-               run_hooks=train_run_hooks,
-            ) as train_exe:
-            while True:
-                train_exe.run()  # train
+        train_ds = train_dataset.start()
+        with MonitoredExecutor(
+                train_exe,
+                train_program,
+                state=train_init_state,
+                run_config=run_config,
+                run_hooks=train_run_hooks, ) as train_exe:
+            for data in train_ds:
+                train_exe.run(feed=data)  # train
                 # start eval_loop
                 if eval_dataset is not None and \
                     train_exe.state.gstep % run_config.eval_steps == 0 and \
@@ -329,8 +357,9 @@ def train_and_eval(model_class_or_model_fn,
                         ret = evaluate(name, train_exe.state)
                         eval_result[name] = ret
                     for exporter in exporters:
-                        exporter.export(start_exe, train_program, eval_result,
+                        exporter.export(start_exe, train_program,
+                                        eval_model_spec, eval_result,
                                         train_exe.state)
                     log.debug('eval done')
     except (F.core.EOFException, StopException):
-        log.debug('Train dataset ran out of data')
+        pass

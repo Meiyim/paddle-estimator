@@ -20,6 +20,13 @@ import sys
 _global_collection = None
 
 
+class Key(object):
+    """predefine collection keys"""
+    SUMMARY_SCALAR = 1
+    SUMMARY_HISTOGRAM = 2
+    SKIP_OPTIMIZE = 3
+
+
 class Collections(object):
     """global collections to record everything"""
 
@@ -35,19 +42,15 @@ class Collections(object):
         global _global_collection
         _global_collection = None
 
-    def add_to(self, key, val):
+    def add(self, key, val):
         self.col.setdefault(key, []).append(val)
 
-    def get_from(self, key):
+    def get(self, key):
         return self.col.get(key, None)
 
 
-def add_to(key, val):
-    if _global_collection is not None:
-        _global_collection.add_to(key, val)
-
-
-def get_from(key):
-    if _global_collection is not None:
-        return _global_collection.get_collection(key)
-    return None
+def default_collection():
+    global _global_collection
+    if _global_collection is None:
+        _global_collection = Collections()
+    return _global_collection

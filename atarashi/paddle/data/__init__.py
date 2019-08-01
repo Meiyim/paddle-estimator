@@ -15,5 +15,5 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-from .functional import *
-from .feature_column import *
+from atarashi.paddle.data.functional import *
+from atarashi.paddle.data.feature_column import *

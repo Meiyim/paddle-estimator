@@ -17,8 +17,8 @@ from __future__ import unicode_literals
 
 import six
 from atarashi.types import *
-from atarashi.util import ArgumentParser, parse_hparam, parse_runconfig
+from atarashi.util import ArgumentParser, parse_hparam, parse_runconfig, parse_file
 
-from . import data
-from . import train
+from atarashi.paddle import data
+from atarashi.paddle import train
 from atarashi.paddle.train import *
