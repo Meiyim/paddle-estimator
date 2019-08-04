@@ -132,8 +132,13 @@ def predict(model_class_or_model_fn,
     with F.program_guard(program, startup_prog):
         with F.unique_name.guard():
             fea = infer_dataset.features()
+            log.info('Building Predict Graph...')
             model_spec = build_net(model_class_or_model_fn, fea,
                                    RunMode.PREDICT, params, run_config)
+            log.info('Building Predict Graph: Done')
+            log.info('Memory optimizing...')
+            F.memory_optimize(input_program=program)
+            log.info('Memory optimizing: Done')
     program = program.clone(for_test=True)
     start_exe = F.Executor(F.CUDAPlace(0))
     start_exe.run(startup_prog)
@@ -146,10 +151,18 @@ def predict(model_class_or_model_fn,
 
     pred = model_spec.predictions
     pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
+
+    dev_list = F.cuda_places()  #list all visible divices
+    if len(dev_list) > 1:
+        log.warm(
+            'Executing multi card prediction, No. of cards: %d > 1. will drop remainder'
+            % len(dev_list))
+    predict_exe = get_parallel_exe(program, model_spec.predictions,
+                                   len(dev_list))
     try:
         log.info('Runining predict from dir: %s' % model_dir)
-        for data in infer_dataset.start(places=[F.CUDAPlace(0)]):
-            res = start_exe.run(program, fetch_list=pred_list, feed=data)
+        for data in infer_dataset.start(dev_list):
+            res = predict_exe.run(fetch_list=pred_list, feed=data)
             if split_batch:
                 res = map(lambda i: i.tolist(), res)
                 res = zip(*res)  # transpose
@@ -192,11 +205,11 @@ def train_and_eval(model_class_or_model_fn,
             if histograms is not None:
                 skip_opt |= {t for _, t in histograms}
             skip_opt = list(skip_opt)
-            log.debug('skip memory optimize for %d ops' % len(skip_opt))
-            log.debug('Memory optimizing...')
+            log.info('skip memory optimize for %d ops' % len(skip_opt))
+            log.info('Memory optimizing...')
             F.memory_optimize(
                 input_program=train_program, skip_opt_set=skip_opt)
-            log.debug('Memory optimizing: Done')
+            log.info('Memory optimizing: Done')
 
     log.info(
         'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
