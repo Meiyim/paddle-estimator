@@ -156,7 +156,7 @@ def take_func(dataset, count):
     return gen
 
 
-def padded_batch_func(dataset, batch_size, pad_value=0):
+def padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
     def gen():
         iterable = dataset()
         pad_value_t = pad_value
@@ -174,8 +174,9 @@ def padded_batch_func(dataset, batch_size, pad_value=0):
             for e, pv in zip(buf, pad_value_t):
                 elem = e[0]
                 if (not np.isscalar(elem)) and elem.shape != ():
-                    max_len = max(map(len, e))
-                    e = map(lambda i: np.pad(i, [0, max_len - len(i)], 'constant', constant_values=pv), e)
+                    max_len = max(map(len,
+                                      e)) if max_seqlen is None else max_seqlen
+                    e = map(lambda i: np.pad(i, [0, max_len - len(i)] if max_len >= len(i) else i[: max_len], 'constant', constant_values=pv), e)
                 padded.append(np.stack(e))
             yield padded
 
@@ -331,9 +332,12 @@ class Dataset(object):
             block_length=block_length)
         return self.apply(func)
 
-    def padded_batch(self, batch_size, pad_value=0):
+    def padded_batch(self, batch_size, pad_value=0, max_seqlen=None):
         func = functools.partial(
-            padded_batch_func, batch_size=batch_size, pad_value=pad_value)
+            padded_batch_func,
+            batch_size=batch_size,
+            pad_value=pad_value,
+            max_seqlen=max_seqlen)
         return self.apply(func)
 
     def take(self, count=1):

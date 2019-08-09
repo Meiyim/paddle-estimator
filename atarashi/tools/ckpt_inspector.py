@@ -118,5 +118,3 @@ if __name__ == '__main__':
         for arr, path in zip(parsed_arr, files):
             if arr is not None:
                 dump(arr, path.replace(args.file_or_dir, ''))
-        else:
-            raise ValueError('unkown format' % args.format)
