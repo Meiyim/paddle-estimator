@@ -60,9 +60,8 @@ def open_file(filename):
 
 
 def shuffle_func(dataset, buffer_size):
-    buf = []
-
     def gen():
+        buf = []
         iterable = dataset()
         try:
             while len(buf) < buffer_size:
