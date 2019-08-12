@@ -24,11 +24,15 @@ import numpy as np
 import logging
 import paddle.fluid as F
 import paddle.fluid.layers as L
-from tensorboardX import SummaryWriter
 
 from atarashi import util
 from atarashi.paddle.train import distribution
 from atarashi.paddle.train.metrics import Metrics
+
+__all__ = [
+    'RunHook', 'TqdmProgressBarHook', 'CheckpointSaverHook', 'LoggingHook',
+    'StopAtStepHook', 'EvalHook'
+]
 
 log = logging.getLogger(__name__)
 
@@ -53,24 +57,55 @@ class RunHook(object):
         pass
 
 
+class TqdmProgressBarHook(RunHook):
+    def __init__(self, max_steps, desc=None):
+        self.tqdm = None
+        import tqdm
+        from atarashi import log as main_log
+        hdl = main_log.handlers[0]
+
+        class TqdmLogginHandler(logging.Handler):
+            def emit(self, record):
+                try:
+                    msg = self.format(record)
+                    tqdm.tqdm.write(msg, file=sys.stderr)
+                    self.flush()
+                except (KeyboardInterrupt, SystemExit):
+                    raise
+                except:
+                    self.handleError(record)
+
+        tqdm_hdl = TqdmLogginHandler()
+        tqdm_hdl.setFormatter(hdl.formatter)
+        main_log.removeHandler(hdl)
+        main_log.addHandler(tqdm_hdl)
+        self.tqdm = tqdm.tqdm(total=max_steps, desc=None)
+
+    def before_run(self, state):
+        self.tqdm.n = state.gstep
+        return []
+
+    def __del__(self):
+        if self.tqdm:
+            self.tqdm.close()
+
+
 class LoggingHook(RunHook):
     def __init__(self,
                  loss,
                  per_step=10,
                  skip_step=100,
-                 board_log_dir=None,
+                 summary_writer=None,
                  summary_record=None):
         self.loss = loss.name
         self.per_step = per_step
         self.skip_step = skip_step
-        self.board_log_dir = board_log_dir
         self.summary_record = summary_record
-        self.writer = None
+        self.writer = summary_writer
         self.last_state = None
 
     def before_train(self):
         if self.summary_record:
-            assert self.board_log_dir
             if self.summary_record.scalar:
                 self.s_name, self.s_tolog = zip(*self.summary_record.scalar)
             else:
@@ -80,11 +115,6 @@ class LoggingHook(RunHook):
                 self.h_name, self.h_tolog = zip(*self.summary_record.histogram)
             else:
                 self.h_name, self.h_tolog = [], []
-
-        if distribution.status.is_master:
-            self.writer = SummaryWriter(self.board_log_dir)
-        else:
-            self.writer = None
 
     def before_run(self, state):
         if state.gstep % self.per_step == 0 and state.step > self.skip_step:
@@ -140,17 +170,9 @@ class LoggingHook(RunHook):
                     map(lambda t: '%s:%s' % t, zip(self.s_name, s_np))),
             ]))
 
-    def after_train(self):
-        if self.writer:
-            self.writer.close()
-
 
 class StopAtStepHook(RunHook):
-    def __init__(self,
-                 stop_global_step,
-                 stop_step,
-                 msg=None,
-                 show_progress_bar=False):
+    def __init__(self, stop_global_step, stop_step, msg=None):
         self._stop_gstep = stop_global_step
         self._stop_step = stop_step
 
@@ -166,11 +188,10 @@ class StopAtStepHook(RunHook):
 class EvalHook(RunHook):
     """hook this on a eval Executor"""
 
-    def __init__(self, name, metrics, board_log_dir):
-        self.board_log_dir = board_log_dir
+    def __init__(self, name, metrics, summary_writer=None):
         self._name = name
         self.train_state = None
-        self.writer = None
+        self.writer = summary_writer
         self._result = None
 
         if not isinstance(metrics, dict):
@@ -187,7 +208,6 @@ class EvalHook(RunHook):
             self.metrics = list(metrics.values())
         else:
             self.names, self.metrics = [], []
-        self.writer = SummaryWriter(self.board_log_dir)
 
     def set_train_state(self, state):
         self.train_state = state
@@ -228,17 +248,15 @@ class EvalHook(RunHook):
             self._result[n] = val
             assert val.shape == (), 'metrics eval use float'
             printable.append('{}\t{}'.format(n, val))
-            self.writer.add_scalar(n, val, self.train_state.gstep)
+            if self.writer is not None:
+                self.writer.add_scalar(n, val, self.train_state.gstep)
+            log.debug('write to tensorboard %s' % repr(self.writer))
 
         if len(printable):
             log.info('*** eval res: %10s ***' % self._name)
             for p in printable:
                 log.info(p)
             log.info('******************************')
-
-    def __del__(self):
-        if self.writer:
-            self.writer.close()
 
 
 class CheckpointSaverHook(RunHook):

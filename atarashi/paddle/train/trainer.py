@@ -245,10 +245,11 @@ def train_and_eval(model_class_or_model_fn,
             try:  #[try -> with -> while]
                 ds = eval_dataset[name]
                 program = eval_program[name]
-                log_dir = os.path.join(
-                    os.path.join(run_config.model_dir, 'eval_history'), name)
                 eval_hook = hooks.EvalHook(
-                    name, eval_model_spec.metrics, board_log_dir=log_dir)
+                    name,
+                    eval_model_spec.metrics,
+                    summary_writer=eval_summary_writer
+                )  #summary_writer is defined below...
                 eval_hook.set_train_state(train_state)
                 eval_run_hooks = [eval_hook]
                 if run_config.eval_max_steps is not None:
@@ -326,7 +327,18 @@ def train_and_eval(model_class_or_model_fn,
     log.info('Device count %d' % F.core.get_cuda_device_count())
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
 
+    summary_writer = None
     try:  #[try -> with -> while]
+        try:
+            from tensorboardX import SummaryWriter
+            if distribution.status.is_master:
+                summary_writer = SummaryWriter(
+                    os.path.join(run_config.model_dir, 'train_history'))
+                eval_summary_writer = SummaryWriter(
+                    os.path.join(run_config.model_dir, 'eval_history'))
+        except ImportError:
+            log.warning(
+                'tensorboardX not installed, will not log to tensorboard')
         summary_record = SummaryRecord(
             scalar=collections.get(collection.Key.SUMMARY_SCALAR),
             histogram=collections.get(collection.Key.SUMMARY_HISTOGRAM), )
@@ -336,9 +348,8 @@ def train_and_eval(model_class_or_model_fn,
                 run_config.max_steps, run_config.run_steps, msg='training'),
             hooks.LoggingHook(
                 model_spec.loss,
-                board_log_dir=os.path.join(run_config.model_dir,
-                                           'train_history'),
                 summary_record=summary_record,
+                summary_writer=summary_writer,
                 per_step=run_config.log_steps,
                 skip_step=run_config.skip_steps),
         ]
@@ -375,3 +386,7 @@ def train_and_eval(model_class_or_model_fn,
                     log.debug('eval done')
     except (F.core.EOFException, StopException):
         pass
+    finally:
+        if summary_writer is not None:
+            summary_writer.close()
+            eval_summary_writer.close()
