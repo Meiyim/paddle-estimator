@@ -25,7 +25,8 @@ import sklearn.metrics
 log = logging.getLogger(__name__)
 
 __all__ = [
-    'Metrics', 'F1', 'Recall', 'Precision', 'Mrr', 'Mean', 'Acc', 'ChunkF1'
+    'Metrics', 'F1', 'Recall', 'Precision', 'Mrr', 'Mean', 'Acc', 'ChunkF1',
+    'Pn'
 ]
 
 
@@ -349,6 +350,137 @@ class ChunkF1(Metrics):
             f1 = 2 * precision * recall / (precision + recall)
 
         return np.float32(f1)
+
+
+class Pn(Metrics):
+    def __init__(self, qid, label, pred, is_binary_label=True):
+        self.qid = qid
+        self.label = label
+        self.pred = pred
+        self.is_binary_label = is_binary_label
+        self.saver = {}
+
+    def reset(self):
+        self.saver = {}
+
+    @property
+    def tensor(self):
+        self.qid.persitable = True
+        self.label.persitable = True
+        self.pred.persitable = True
+        return [self.qid.name, self.label.name, self.pred.name]
+
+    def update(self, args):
+        qid, label, pred = args
+        if not (qid.shape[0] == label.shape[0] == pred.shape[0]):
+            raise ValueError('dimention not match: qid[%s] label[%s], pred[%s]'
+                             % (qid.shape, label.shape, pred.shape))
+        qid = qid.reshape([-1]).tolist()
+        label = label.reshape([-1]).tolist()
+        pred = pred.reshape([-1]).tolist()
+        assert len(qid) == len(label) == len(pred)
+        for q, l, p in zip(qid, label, pred):
+            if q not in self.saver:
+                self.saver[q] = []
+            self.saver[q].append((l, p))
+
+    def eval(self):
+        if self.is_binary_label is True:
+            v = self._binary_label_eval()
+        else:
+            v = self._multi_label_eval()
+        return np.float32(v)
+
+    def _binary_label_eval(self):
+        p = 0
+        n = 0
+        for qid, outputs in self.saver.items():
+            pos_set = []
+            neg_set = []
+            for label, score in outputs:
+                if label == 1:
+                    pos_set.append(score)
+                else:
+                    neg_set.append(score)
+
+            for ps in pos_set:
+                for ns in neg_set:
+                    if ps > ns:
+                        p += 1
+                    elif ps < ns:
+                        n += 1
+                    else:
+                        continue
+        pn = p / n if n > 0 else 0.0
+        return pn
+
+    def _multi_label_eval(self):
+        p = 0
+        n = 0
+        for qid, outputs in self.saver.items():
+            for i in range(0, len(outputs)):
+                l1, p1 = outputs[i]
+                for j in range(i + 1, len(outputs)):
+                    l2, p2 = outputs[j]
+                    if l1 > l2:
+                        if p1 > p2:
+                            p += 1
+                        elif p1 < p2:
+                            n += 1
+                    elif l1 < l2:
+                        if p1 < p2:
+                            p += 1
+                        elif p1 > p2:
+                            n += 1
+        pn = p / n if n > 0 else 0.0
+        return pn
+
+
+class PrecisionAtK(Metrics):
+    def __init__(self, qid, label, pred, k=1):
+        self.qid = qid
+        self.label = label
+        self.pred = pred
+        self.k = k
+        self.saver = {}
+
+    def reset(self):
+        self.saver = {}
+
+    @property
+    def tensor(self):
+        self.qid.persitable = True
+        self.label.persitable = True
+        self.pred.persitable = True
+        return [self.qid.name, self.label.name, self.pred.name]
+
+    def update(self, args):
+        qid, label, pred = args
+        if not (qid.shape[0] == label.shape[0] == pred.shape[0]):
+            raise ValueError('dimention not match: qid[%s] label[%s], pred[%s]'
+                             % (qid.shape, label.shape, pred.shape))
+        qid = qid.reshape([-1]).tolist()
+        label = label.reshape([-1]).tolist()
+        pred = pred.reshape([-1]).tolist()
+
+        assert len(qid) == len(label) == len(pred)
+        for q, l, p in zip(qid, label, pred):
+            if q not in self.saver:
+                self.saver[q] = []
+            self.saver[q].append((l, p))
+
+    def eval(self):
+        right = 0
+        total = 0
+        for v in self.saver.values():
+            v = sorted(v, key=lambda x: x[1], reverse=True)
+            for i in range(self.k):
+                if v[i][0] == 1:
+                    right += 1
+                    break
+            total += 1
+
+        return np.float32(1.0 * right / total)
 
 
 #class SemanticRecallMetrics(Metrics):

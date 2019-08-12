@@ -109,7 +109,7 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
     if mode == RunMode.TRAIN:
         assert model_spec.loss is not None
     elif mode == RunMode.EVAL:
-        assert model_spec.metrics is not None and model_spec.loss is not None
+        assert model_spec.metrics is not None
     elif mode == RunMode.PREDICT:
         assert model_spec.predictions is not None
     else:
