@@ -109,7 +109,7 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
     if mode == RunMode.TRAIN:
         assert model_spec.loss is not None
     elif mode == RunMode.EVAL:
-        assert model_spec.metrics is not None and model_spec.loss is not None
+        assert model_spec.metrics is not None
     elif mode == RunMode.PREDICT:
         assert model_spec.predictions is not None
     else:
@@ -328,6 +328,7 @@ def train_and_eval(model_class_or_model_fn,
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
 
     summary_writer = None
+    eval_summary_writer = None
     try:  #[try -> with -> while]
         try:
             from tensorboardX import SummaryWriter
