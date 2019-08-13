@@ -328,6 +328,7 @@ def train_and_eval(model_class_or_model_fn,
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
 
     summary_writer = None
+    eval_summary_writer = None
     try:  #[try -> with -> while]
         try:
             from tensorboardX import SummaryWriter

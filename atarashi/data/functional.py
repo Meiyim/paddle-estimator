@@ -22,6 +22,7 @@ import itertools
 import random
 import inspect
 import numpy as np
+from contextlib import contextmanager
 
 import gzip
 import struct
@@ -36,9 +37,21 @@ log = logging.getLogger(__name__)
 __all__ = ['Dataset']
 
 
-def open_gz(filename):
+@contextmanager
+def open_file(filename, format=None):
+    if format is None:
+        fd = open(filename, 'rb')
+    elif format == 'GZIP':
+        fd = gzip.open(filename, 'rb')
+    else:
+        raise ValueError('unkwon file format %s' % format)
+    yield fd
+    fd.close()
+
+
+def open_record(filename):
     def gen():
-        with gzip.open(filename, 'rb') as f:
+        with open_file(filename, format='GZIP') as f:
             while True:
                 data = f.read(struct.calcsize('i'))
                 if not len(data):
@@ -46,15 +59,6 @@ def open_gz(filename):
                 l, = struct.unpack('i', data)
                 data = f.read(l)
                 yield data
-
-    return gen
-
-
-def open_file(filename):
-    def gen():
-        with open(filename, 'rb') as f:
-            for line in f:
-                yield line
 
     return gen
 
@@ -177,7 +181,7 @@ def padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
                     max_len = max(map(len,
                                       e)) if max_seqlen is None else max_seqlen
                     e = map(lambda i: np.pad(i, [0, max_len - len(i)] if max_len >= len(i) else i[: max_len], 'constant', constant_values=pv), e)
-                padded.append(np.stack(e))
+                padded.append(np.stack(list(e)))
             yield padded
 
     return gen
@@ -195,10 +199,15 @@ class Dataset(object):
         return ret
 
     @classmethod
-    def from_file(cls, filename):
+    def from_file(cls, filename, format=None):
         if os.path.getsize(filename) == 0:
             raise RuntimeError('%s is empty' % filename)
-        gen = open_file(filename)
+
+        def gen():
+            with open_file(filename, format) as f:
+                for line in f:
+                    yield line
+
         ret = cls()
         ret.generator = gen
         ret.data_shapes = []
@@ -206,10 +215,10 @@ class Dataset(object):
         return ret
 
     @classmethod
-    def from_gz_file(cls, filename):
+    def from_record_file(cls, filename):
         if os.path.getsize(filename) == 0:
             raise RuntimeError('%s is empty' % filename)
-        gen = open_gz(filename)
+        gen = open_record(filename)
         ret = cls()
         ret.generator = gen
         ret.data_shapes = []
