@@ -25,8 +25,8 @@ log = logging.getLogger(__name__)
 
 from atarashi.paddle.train.monitored_executor import *
 from atarashi.paddle.train.trainer import *
+from atarashi.paddle.train.hooks import *
 from atarashi.train.model import Model
 from atarashi.paddle.train import exporter
 from atarashi.paddle.train import distribution
-from atarashi.paddle.train import hooks
 from atarashi.paddle.train import metrics
