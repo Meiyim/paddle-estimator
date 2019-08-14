@@ -21,22 +21,29 @@ import re
 import json
 import argparse
 import itertools
+import logging
+from functools import reduce
 
 from atarashi.types import RunConfig
 from atarashi.types import HParams
+
+log = logging.getLogger(__name__)
 
 
 def ArgumentParser(name):
     parser = argparse.ArgumentParser('atarashi model')
     #parser.add_argument('--param_dir', type=str)
     parser.add_argument('--run_config', type=str, default='')
-    parser.add_argument('--hparam', type=str, default='')
+    parser.add_argument(
+        '--hparam', type=str, nargs='*', action='append', default=[['']])
     #parser.add_argument('--train_dir', type=str)
     parser.add_argument('--batch_size', type=int)
     return parser
 
 
 def _get_dict_from_environ_or_json_or_file(args, env_name):
+    if args == '':
+        return None
     if args is None:
         s = os.environ.get(env_name)
     else:
@@ -70,11 +77,21 @@ def parse_runconfig(args=None):
 
 
 def parse_hparam(args=None):
-    d = _get_dict_from_environ_or_json_or_file(args.hparam, 'ATARASHI_HPARAMS')
-    if d is None:
+    if args is not None:
+        hparam_strs = reduce(list.__add__, args.hparam)
+    else:
+        hparam_strs = [None]
+
+    hparams = [
+        _get_dict_from_environ_or_json_or_file(hp, 'ATARASHI_HPARAMS')
+        for hp in hparam_strs
+    ]
+    hparams = [HParams(**h) for h in hparams if h is not None]
+    if len(hparams) is None:
         raise ValueError('hparam not found')
-    hp = HParams(**d)
-    return hp
+    hparam = reduce(lambda x, y: x.join(y), hparams)
+    log.info(repr(hparam))
+    return hparam
 
 
 def flatten(s):
