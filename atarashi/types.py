@@ -39,6 +39,9 @@ class HParams(object):
             raise ValueError('key(%s) not in HParams.' % key)
         return self.__dict__[key]
 
+    def __repr__(self):
+        return repr(self.to_dict())
+
     def __setitem__(self, key, val):
         self.__dict__[key] = val
 
@@ -77,9 +80,8 @@ SummaryRecord = namedtuple('SummaryRecord', ['scalar', 'histogram'])
 WarmStartSetting = namedtuple('WarmStartSetting', ['predicate_fn', 'from_dir'])
 
 RunConfig = namedtuple('RunConfig', [
-    'batch_size', 'model_dir', 'run_steps', 'max_steps', 'save_steps',
-    'eval_steps', 'eval_max_steps', 'skip_steps', 'log_steps', 'max_ckpt',
-    'shit'
+    'model_dir', 'run_steps', 'max_steps', 'save_steps', 'eval_steps',
+    'eval_max_steps', 'skip_steps', 'log_steps', 'max_ckpt', 'shit'
 ])
 RunConfig.__new__.__defaults__ = (None, ) * len(RunConfig._fields)
 
