@@ -13,34 +13,34 @@
 // limitations under the License.
 
 syntax = "proto3";
-package atarashi;
+package interface;
 
-message BytesList {
-  repeated bytes value = 1;
-}
-message FloatList {
-  repeated float value = 1 [packed = true];
-}
-message Int64List {
-  repeated int64 value = 1 [packed = true];
+service Inference {
+  rpc Infer(Slots) returns (Slots){}
 }
 
-message Feature {
-  oneof kind {
-    BytesList bytes_list = 1;
-    FloatList float_list = 2;
-    Int64List int64_list = 3;
+message Slots {
+  repeated Slot slots = 1;
+}
+
+message Slot {
+  enum Type {
+    // Pod Types
+    BOOL = 0;
+    INT16 = 1;
+    INT32 = 2;
+    INT64 = 3;
+    FP16 = 4;
+    FP32 = 5;
+    FP64 = 6;
+    // Tensor<size_t> is used in C++.
+    SIZE_T = 19;
+    UINT8 = 20;
+    INT8 = 21;
   }
-};
 
-message Features {
-  map<string, Feature> feature = 1;
-};
+  Type type = 1;
+  repeated int64 dims = 2; // [UNK, 640, 480] is saved as [-1, 640, 480]
+  bytes data = 3;
+}
 
-message FeatureList {
-  repeated Feature feature = 1;
-};
-
-message FeatureLists {
-  map<string, FeatureList> feature_list = 1;
-};
