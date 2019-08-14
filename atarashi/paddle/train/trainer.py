@@ -219,8 +219,7 @@ def train_and_eval(model_class_or_model_fn,
     distribution.init_distribuition_env(train_program, startup_prog)
 
     if eval_dataset is not None:
-        if not (isinstance(eval_dataset, dict) or isinstance(eval_dataset,
-                                                             Dataset)):
+        if not isinstance(eval_dataset, (dict, Dataset)):
             raise ValueError(
                 'Eval dataset should be atarashi.Dataset of a list of that, got: %s'
                 % eval_dataset)
@@ -241,14 +240,13 @@ def train_and_eval(model_class_or_model_fn,
             program = program.clone(for_test=True)
             eval_program[name] = program
 
-        def evaluate(name, train_state):
+        def evaluate(name, train_state, ds, writer):
             try:  #[try -> with -> while]
-                ds = eval_dataset[name]
                 program = eval_program[name]
                 eval_hook = hooks.EvalHook(
                     name,
                     eval_model_spec.metrics,
-                    summary_writer=eval_summary_writer
+                    summary_writer=writer,
                 )  #summary_writer is defined below...
                 eval_hook.set_train_state(train_state)
                 eval_run_hooks = [eval_hook]
@@ -335,8 +333,12 @@ def train_and_eval(model_class_or_model_fn,
             if distribution.status.is_master:
                 summary_writer = SummaryWriter(
                     os.path.join(run_config.model_dir, 'train_history'))
-                eval_summary_writer = SummaryWriter(
-                    os.path.join(run_config.model_dir, 'eval_history'))
+                eval_summary_writers = {
+                    name: SummaryWriter(
+                        os.path.join(run_config.model_dir,
+                                     os.path.join('eval_history', name)))
+                    for name, ds in six.iteritems(eval_dataset)
+                }
         except ImportError:
             log.warning(
                 'tensorboardX not installed, will not log to tensorboard')
@@ -374,11 +376,14 @@ def train_and_eval(model_class_or_model_fn,
                 train_exe.run(feed=data)  # train
                 # start eval_loop
                 if eval_dataset is not None and \
+                    distribution.status.is_master and \
                     train_exe.state.gstep % run_config.eval_steps == 0 and \
                     train_exe.state.gstep > run_config.skip_steps:
                     eval_result = {}
                     for name, _ in six.iteritems(eval_dataset):
-                        ret = evaluate(name, train_exe.state)
+                        ret = evaluate(name, train_exe.state,
+                                       eval_dataset[name],
+                                       eval_summary_writers[name])
                         eval_result[name] = ret
                     for exporter in exporters:
                         exporter.export(start_exe, train_program,
@@ -390,4 +395,5 @@ def train_and_eval(model_class_or_model_fn,
     finally:
         if summary_writer is not None:
             summary_writer.close()
-            eval_summary_writer.close()
+            for v in eval_summary_writers.values():
+                v.close()
