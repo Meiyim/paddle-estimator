@@ -352,12 +352,11 @@ class ChunkF1(Metrics):
         return np.float32(f1)
 
 
-class Pn(Metrics):
-    def __init__(self, qid, label, pred, is_binary_label=True):
+class PNRatio(Metrics):
+    def __init__(self, qid, label, pred):
         self.qid = qid
         self.label = label
         self.pred = pred
-        self.is_binary_label = is_binary_label
         self.saver = {}
 
     def reset(self):
@@ -385,13 +384,32 @@ class Pn(Metrics):
             self.saver[q].append((l, p))
 
     def eval(self):
-        if self.is_binary_label is True:
-            v = self._binary_label_eval()
-        else:
-            v = self._multi_label_eval()
-        return np.float32(v)
+        p = 0
+        n = 0
+        for qid, outputs in self.saver.items():
+            for i in range(0, len(outputs)):
+                l1, p1 = outputs[i]
+                for j in range(i + 1, len(outputs)):
+                    l2, p2 = outputs[j]
+                    if l1 > l2:
+                        if p1 > p2:
+                            p += 1
+                        elif p1 < p2:
+                            n += 1
+                    elif l1 < l2:
+                        if p1 < p2:
+                            p += 1
+                        elif p1 > p2:
+                            n += 1
+        pn = p / n if n > 0 else 0.0
+        return np.float32(pn)
 
-    def _binary_label_eval(self):
+
+class BinaryPNRatio(PNRatio):
+    def __init__(self, qid, label, pred):
+        super(BinaryPNRatio, self).__init__(qid, label, pred)
+
+    def eval(self):
         p = 0
         n = 0
         for qid, outputs in self.saver.items():
@@ -412,28 +430,7 @@ class Pn(Metrics):
                     else:
                         continue
         pn = p / n if n > 0 else 0.0
-        return pn
-
-    def _multi_label_eval(self):
-        p = 0
-        n = 0
-        for qid, outputs in self.saver.items():
-            for i in range(0, len(outputs)):
-                l1, p1 = outputs[i]
-                for j in range(i + 1, len(outputs)):
-                    l2, p2 = outputs[j]
-                    if l1 > l2:
-                        if p1 > p2:
-                            p += 1
-                        elif p1 < p2:
-                            n += 1
-                    elif l1 < l2:
-                        if p1 < p2:
-                            p += 1
-                        elif p1 > p2:
-                            n += 1
-        pn = p / n if n > 0 else 0.0
-        return pn
+        return np.float32(pn)
 
 
 class PrecisionAtK(Metrics):
