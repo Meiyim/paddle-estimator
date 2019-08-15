@@ -247,7 +247,7 @@ class FeatureColumns(object):
             dataset = dataset.shuffle(buffer_size=len(gz_files))
         fn = partial(
             interleave_func,
-            map_fn=lambda filename: Dataset.from_gz_file(filename),
+            map_fn=lambda filename: Dataset.from_record_file(filename),
             cycle_length=len(gz_files),
             block_length=1)
         dataset = dataset.apply(fn)
