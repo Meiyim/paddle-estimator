@@ -1,17 +1,17 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-########################################################################
+#   Copyright (c) 2019 PaddlePaddle Authors. All Rights Reserved.
 #
-# Copyright (c) 2019 Baidu.com, Inc. All Rights Reserved
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-# File: paddle/service/__main__.py
-# Author: suweiyue(suweiyue@baidu.com)
-# Date: 2019/08/14 17:01:17
+#     http://www.apache.org/licenses/LICENSE-2.0
 #
-########################################################################
-"""
-    Comment.
-"""
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import division
 from __future__ import absolute_import
 from __future__ import print_function
@@ -21,51 +21,84 @@ import logging
 import six
 import asyncio
 import threading
-from collections import defaultdict
 
 import grpc
-from atarashi.paddle.service import interface_pb2
-from atarashi.paddle.service import interface_pb2_grpc
+from atarashi.service import interface_pb2
+from atarashi.service import interface_pb2_grpc
 import atarashi.paddle.service.utils as serv_utils
 
 from concurrent.futures import ThreadPoolExecutor
 
 import paddle.fluid as F
-import threading
 
 from time import sleep, time
 
 log = logging.getLogger(__name__)
 
 
+def profile(msg):
+    def decfn(fn):
+        def retfn(*args, **kwargs):
+            start = time()
+            ret = fn(*args, **kwargs)
+            end = time()
+            log.debug('%s timecost: %.5f' % (msg, end - start))
+            return ret
+
+        return retfn
+
+    return decfn
+
+
 def serve(model_dir, host, num_concurrent=None):
+    if six.PY2:
+        raise RuntimeError('atarashi service work in python3 only')
+    num_worker = len(F.cuda_places(
+    )) if num_concurrent is None else num_concurrent
+    pool = ThreadPoolExecutor(num_worker)
+
     class Predictor(object):
-        def __init__(self):
-            pass
+        def __init__(self, did):
+            log.debug('create predictor on card %d' % did)
+            config = F.core.AnalysisConfig(model_dir)
+            config.enable_use_gpu(5000, did)
+            self._predictor = F.core.create_paddle_predictor(config)
 
+        @profile('paddle')
         def __call__(self, args):
-            return [arg + 1 for arg in args]
+            for i, a in enumerate(args):
+                a.name = 'placeholder_%d' % i
+            res = self._predictor.run(args)
+            return res
 
-    predictor_context = defaultdict(Predictor)
+    predictor_context = {}
 
     class InferenceService(interface_pb2_grpc.InferenceServicer):
+        @profile('service')
         def Infer(self, request, context):
             try:
+                start_time = time()
                 slots = request.slots
-                tid = threading.get_ident()
-                log.info('slots received %s dispatch to %s' % (slots, tid))
-                ctx = predictor_context[tid]
-                slots = [serv_utils.slot_to_numpy(s) for s in slots]
-                ret = ctx(slots)
-                response = [serv_utils.numpy_to_slot(r) for r in ret]
+                current_thread = threading.current_thread()
+                log.debug('%d slots received dispatch to thread %s' %
+                          (len(slots), current_thread))
+                if current_thread not in predictor_context:
+                    did = list(pool._threads).index(current_thread)
+                    log.debug('spawning worker thread %d' % did)
+                    predictor = Predictor(did)
+                    predictor_context[current_thread] = predictor
+                else:
+                    predictor = predictor_context[current_thread]
+                slots = [serv_utils.slot_to_paddlearray(s) for s in slots]
+                ret = predictor(slots)
+                response = [serv_utils.paddlearray_to_slot(r) for r in ret]
+                end_time = time()
+                log.debug('time cost %.5f' % (end_time - start_time))
             except Exception as e:
                 log.exception(e)
                 raise e
             return interface_pb2.Slots(slots=response)
 
-    num_worker = len(F.cuda_places(
-    )) if num_concurrent is None else num_concurrent
-    pool = ThreadPoolExecutor(num_worker)
     server = grpc.server(pool)
     interface_pb2_grpc.add_InferenceServicer_to_server(InferenceService(),
                                                        server)
@@ -82,6 +115,8 @@ def serve(model_dir, host, num_concurrent=None):
 
 if __name__ == '__main__':
     from atarashi import log
-    if six.PY2:
-        raise RuntimeError('atarashi service work in python3 only')
-    serve('./', '10.255.138.19:8334', 3)
+    log.setLevel(logging.DEBUG)
+    serve(
+        '/home/work/chenxuyi/dis/pp/fine/ernie1.0/shit7/best/inference/',
+        '10.255.138.19:8334',
+        num_concurrent=3)

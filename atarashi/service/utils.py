@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
 #   Copyright (c) 2019 PaddlePaddle Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,50 +19,41 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import numpy as np
 import struct
 
 from atarashi.service import interface_pb2
 from atarashi.service import interface_pb2_grpc
 
-import paddle.fluid.core as core
 
-
-def slot_to_paddlearray(slot):
+def slot_to_numpy(slot):
     if slot.type == interface_pb2.Slot.FP32:
+        dtype = np.float32
         type_str = 'f'
-        dtype = core.PaddleDType.FLOAT32
     elif slot.type == interface_pb2.Slot.INT32:
         type_str = 'i'
-        dtype = core.PaddleDType.INT32
+        dtype = np.int32
     elif slot.type == interface_pb2.Slot.INT64:
+        dtype = np.int64
         type_str = 'q'
-        dtype = core.PaddleDType.INT64
     else:
         raise RuntimeError('know type %s' % slot.type)
-    ret = core.PaddleTensor()
-    ret.shape = slot.dims
-    ret.dtype = dtype
     num = len(slot.data) // struct.calcsize(type_str)
     arr = struct.unpack('%d%s' % (num, type_str), slot.data)
-    ret.data = core.PaddleBuf(arr)
+    shape = slot.dims
+    ret = np.array(arr, dtype=dtype).reshape(shape)
     return ret
 
 
-def paddlearray_to_slot(arr):
-    if arr.dtype == core.PaddleDType.FLOAT32:
+def numpy_to_slot(arr):
+    if arr.dtype == np.float32:
         dtype = interface_pb2.Slot.FP32
-        type_str = 'f'
-        arr_data = arr.data.float_data()
-    elif arr.dtype == core.PaddleDType.INT32:
+    elif arr.dtype == np.int32:
         dtype = interface_pb2.Slot.INT32
-        type_str = 'i'
-        arr_data = arr.data.int32_data()
-    elif arr.dtype == core.PaddleDType.INT64:
+    elif arr.dtype == np.int64:
         dtype = interface_pb2.Slot.INT64
-        type_str = 'q'
-        arr_data = arr.data.int64_data()
     else:
         raise RuntimeError('know type %s' % arr.dtype)
-    data = struct.pack('%d%s' % (len(arr_data), type_str), *arr_data)
-    pb = interface_pb2.Slot(type=dtype, dims=list(arr.shape), data=data)
+    pb = interface_pb2.Slot(
+        type=dtype, dims=list(arr.shape), data=arr.tobytes())
     return pb
