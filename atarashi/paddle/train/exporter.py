@@ -77,7 +77,7 @@ class BestInferenceModelExporter(Exporter):
             return
         if self.cmp_fn(old=self._best, new=eval_result):
             log.debug('[Best Exporter]: export to %s' % self._export_dir)
-            if eval_model_spec.inference_spec is not None:
+            if eval_model_spec.inference_spec is None:
                 raise ValueError('model_fn didnt return InferenceSpec')
 
             inf_sepc_dict = eval_model_spec.inference_spec
