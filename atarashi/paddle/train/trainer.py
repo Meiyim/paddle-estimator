@@ -325,20 +325,27 @@ def train_and_eval(model_class_or_model_fn,
     log.info('Device count %d' % F.core.get_cuda_device_count())
     #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
 
-    summary_writer = None
-    eval_summary_writer = None
     try:  #[try -> with -> while]
+        summary_writer = None
+        if eval_dataset is not None:
+            eval_summary_writers = {
+                name: None
+                for name, ds in six.iteritems(eval_dataset)
+            }
+        else:
+            eval_summary_writers = None
         try:
             from tensorboardX import SummaryWriter
             if distribution.status.is_master:
                 summary_writer = SummaryWriter(
                     os.path.join(run_config.model_dir, 'train_history'))
-                eval_summary_writers = {
-                    name: SummaryWriter(
-                        os.path.join(run_config.model_dir,
-                                     os.path.join('eval_history', name)))
-                    for name, ds in six.iteritems(eval_dataset)
-                }
+                if eval_dataset is not None:
+                    eval_summary_writers = {
+                        name: SummaryWriter(
+                            os.path.join(run_config.model_dir,
+                                         os.path.join('eval_history', name)))
+                        for name, ds in six.iteritems(eval_dataset)
+                    }
         except ImportError:
             log.warning(
                 'tensorboardX not installed, will not log to tensorboard')
@@ -395,5 +402,7 @@ def train_and_eval(model_class_or_model_fn,
     finally:
         if summary_writer is not None:
             summary_writer.close()
-            for v in eval_summary_writers.values():
-                v.close()
+            if eval_summary_writers is not None:
+                for v in eval_summary_writers.values():
+                    if v is not None:
+                        v.close()
