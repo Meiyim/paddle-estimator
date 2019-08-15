@@ -88,7 +88,7 @@ class BestInferenceModelExporter(Exporter):
                     raise ValueError('unkonw inference spec type: %s' % v)
 
                 save_dir = os.path.join(self._export_dir, inf_sepc_name)
-                log.debug('[Best Exporter]: save inference model: %s to %s' %
+                log.debug('[Best Exporter]: save inference model: "%s" to %s' %
                           (inf_sepc_name, save_dir))
                 feed_var = [i.name for i in inf_sepc.inputs]
                 fetch_var = inf_sepc.outputs

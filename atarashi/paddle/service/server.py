@@ -77,7 +77,6 @@ def serve(model_dir, host, num_concurrent=None):
         @profile('service')
         def Infer(self, request, context):
             try:
-                start_time = time()
                 slots = request.slots
                 current_thread = threading.current_thread()
                 log.debug('%d slots received dispatch to thread %s' %
@@ -92,8 +91,6 @@ def serve(model_dir, host, num_concurrent=None):
                 slots = [serv_utils.slot_to_paddlearray(s) for s in slots]
                 ret = predictor(slots)
                 response = [serv_utils.paddlearray_to_slot(r) for r in ret]
-                end_time = time()
-                log.debug('time cost %.5f' % (end_time - start_time))
             except Exception as e:
                 log.exception(e)
                 raise e
@@ -117,6 +114,6 @@ if __name__ == '__main__':
     from atarashi import log
     log.setLevel(logging.DEBUG)
     serve(
-        '/home/work/chenxuyi/dis/pp/fine/ernie1.0/shit7/best/inference/',
+        '/home/work/chenxuyi/playground/grpc_play/ernie2.0/',
         '10.255.138.19:8334',
         num_concurrent=3)

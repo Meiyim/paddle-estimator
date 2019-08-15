@@ -274,7 +274,6 @@ def train_and_eval(model_class_or_model_fn,
                         run_hooks=eval_run_hooks, ) as eval_exe:
                     for data in eval_ds:
                         eval_exe.run(feed=data)
-                        #log.debug('eval')
             except (F.core.EOFException, StopException):
                 pass
             return eval_hook.result

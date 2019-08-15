@@ -38,7 +38,7 @@ try:
 except ImportError:
     stream_hdl.setFormatter(formatter)
 
-log.setLevel(logging.DEBUG)
+log.setLevel(logging.INFO)
 log.addHandler(stream_hdl)
 log.propagate = False
 

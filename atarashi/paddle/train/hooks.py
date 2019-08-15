@@ -97,6 +97,9 @@ class LoggingHook(RunHook):
                  skip_step=100,
                  summary_writer=None,
                  summary_record=None):
+        if per_step is None or skip_step is None:
+            raise ValueError('wrong step argument, per step: %d skip_step %d' %
+                             (per_step, skip_step))
         self.loss = loss.name
         self.per_step = per_step
         self.skip_step = skip_step
@@ -250,7 +253,7 @@ class EvalHook(RunHook):
             printable.append('{}\t{}'.format(n, val))
             if self.writer is not None:
                 self.writer.add_scalar(n, val, self.train_state.gstep)
-                log.debug('write to tensorboard %s' % repr(self.writer))
+                log.debug('write to tensorboard %s' % self.writer.log_dir)
 
         if len(printable):
             log.info('*** eval res: %10s ***' % self._name)
