@@ -117,13 +117,21 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
     return model_spec
 
 
-def predict(model_class_or_model_fn,
-            params,
-            model_dir,
-            infer_dataset,
+def predict(_shit=None,
+            model_class_or_model_fn=None,
+            params=None,
+            model_dir=None,
+            infer_dataset=None,
             run_config=None,
             steps=-1,
             split_batch=True):
+    if _shit is not None:
+        raise ValueError('specify keyword args to this function')
+    if model_class_or_model_fn is None or params is None or model_dir is None or infer_dataset is None:
+        raise ValueError(
+            'some argument is None: model_class_or_model_fn:%s params:%s run_config:%s train_dataset:%s'
+            % (model_class_or_model_fn, params, run_config, train_dataset))
+
     if not os.path.exists(model_dir):
         raise ValueError('model dir not found %s' % model_dir)
 
@@ -174,15 +182,22 @@ def predict(model_class_or_model_fn,
         log.debug('Predict done')
 
 
-def train_and_eval(model_class_or_model_fn,
-                   params,
-                   run_config,
-                   train_dataset,
+def train_and_eval(_shit=None,
+                   model_class_or_model_fn=None,
+                   params=None,
+                   run_config=None,
+                   train_dataset=None,
                    eval_dataset=None,
                    warm_start_setting=None,
                    train_hooks=[],
                    eval_hooks=[],
                    exporters=[]):
+    if _shit is not None:
+        raise ValueError('specify keyword args to this function')
+    if model_class_or_model_fn is None or params is None or run_config is None or train_dataset is None:
+        raise ValueError(
+            'some argument is None: model_class_or_model_fn:%s params:%s run_config:%s train_dataset:%s'
+            % (model_class_or_model_fn, params, run_config, train_dataset))
     train_dataset.name = 'train'
     train_program = F.Program()
     startup_prog = F.Program()
