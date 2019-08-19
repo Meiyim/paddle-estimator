@@ -183,6 +183,7 @@ def train_and_eval(model_class_or_model_fn,
                    train_hooks=[],
                    eval_hooks=[],
                    exporters=[]):
+    train_dataset.name = 'train'
     train_program = F.Program()
     startup_prog = F.Program()
     with F.program_guard(train_program, startup_prog):
@@ -225,6 +226,14 @@ def train_and_eval(model_class_or_model_fn,
                 % eval_dataset)
         if isinstance(eval_dataset, Dataset):
             eval_dataset = {'eval': eval_dataset}
+        ds_list = list(eval_dataset.values())
+        for ds in ds_list:
+            ds.name = 'dev'
+        first = ds_list[0]
+        if any((first != d for d in ds_list[1:])):
+            raise ValueError(
+                'eval dataset has different output_shapes or types:' %
+                repr(ds_list))
         eval_program = {}
         for name, ds in six.iteritems(eval_dataset):
             program = F.Program()
@@ -329,7 +338,8 @@ def train_and_eval(model_class_or_model_fn,
         summary_writer = None
         if eval_dataset is not None:
             eval_summary_writers = {
-                name: None
+                name:
+                None  # summary wirter maybe none if tensorboard is not installed
                 for name, ds in six.iteritems(eval_dataset)
             }
         else:
