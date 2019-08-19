@@ -180,17 +180,7 @@ class TextIDColumn(Column):
 
 class FeatureColumns(object):
     def __init__(self, columns, pad_id=0):
-        self._pool = None
         self._columns = columns
-
-    def __del__(self):
-        if self._pool is not None:
-            self._pool.terminate()
-
-    def pool(self):
-        if self._pool is None:
-            self._pool = multiprocessing.Pool()
-        return self._pool
 
     def raw_files(self, raw_dir):
         return [os.path.join(raw_dir, p) for p in os.listdir(raw_dir)]
@@ -214,10 +204,11 @@ class FeatureColumns(object):
         if raw_dir is not None:
             if len(raw_file) != 0:
                 log.debug('try making gz')
-                pool = self.pool()
+                pool = multiprocessing.Pool()
                 args = [(os.path.join(raw_dir, f), os.path.join(gz_dir, f),
                          self._columns, b'\t') for f in raw_file]
                 pool.map(_make_gz, args)
+                pool.terminate()
             else:
                 assert len(
                     os.listdir(gz_dir)
