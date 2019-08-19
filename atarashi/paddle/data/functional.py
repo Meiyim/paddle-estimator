@@ -26,12 +26,15 @@ log = logging.getLogger(__name__)
 
 class Dataset(DatasetBase):
     def placeholders(self):
+        if self.name is None:
+            raise ValueError('can not get feature from unnamed Dataset')
+
         ret = []
         for i, (shape,
                 types) in enumerate(zip(self.data_shapes, self.data_types)):
             ret.append(
                 L.data(
-                    'placeholder_%d' % i,
+                    '%s_placeholder_%d' % (self.name, i),
                     shape=shape,
                     append_batch_size=False,
                     dtype=types))

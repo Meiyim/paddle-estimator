@@ -246,6 +246,11 @@ class Dataset(object):
         self.generator = None
         self.pyreader = None
 
+    def __eq__(self, other):
+        return self.name == other.name and \
+               self._data_shapes == other._data_shapes and \
+               self._data_types == other._data_types
+
     def __iter__(self):
         return self.generator()
 
