@@ -45,7 +45,7 @@ class BestExporter(Exporter):
         self._best = None
         self.cmp_fn = cmp_fn
 
-    def export(self, exe, program, eval_model_spec, eval_result, state):
+    def export(self, exe, program_dict, eval_model_spec, eval_result, state):
         log.debug('New evaluate result: %s \nold: %s' %
                   (repr(eval_result), repr(self._best)))
         if self._best is None:
@@ -54,8 +54,14 @@ class BestExporter(Exporter):
             return
         if self.cmp_fn(old=self._best, new=eval_result):
             log.debug('[Best Exporter]: export to %s' % self._export_dir)
+            eval_program = list(program_dict.values())[0]
+            # FIXME: all eval datasets has same name/types/shapes now!!! so every eval program are the smae
+
             saver = Saver(
-                self._export_dir, exe, program=program, max_ckpt_to_keep=1)
+                self._export_dir,
+                exe,
+                program=eval_program,
+                max_ckpt_to_keep=1)
             saver.save(state)
             self._best = eval_result
         else:
@@ -93,8 +99,8 @@ class BestInferenceModelExporter(Exporter):
                 feed_var = [i.name for i in inf_sepc.inputs]
                 fetch_var = inf_sepc.outputs
 
-                eval_program = list(program_dict.values(
-                ))[0]  # FIXME: all eval datasets has same name/types/shapes now!!! so every eval program are the smae
+                eval_program = list(program_dict.values())[0]
+                # FIXME: all eval datasets has same name/types/shapes now!!! so every eval program are the smae
                 startup_prog = F.Program()
                 F.io.save_inference_model(
                     save_dir,
