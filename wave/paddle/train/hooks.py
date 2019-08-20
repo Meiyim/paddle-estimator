@@ -227,7 +227,7 @@ class EvalHook(RunHook):
                     'metrics should return tuple or list of tensors, got %s' %
                     repr(i))
             for ii in i:
-                if not isinstance(ii, str):
+                if not isinstance(ii, six.string_types):
                     raise ValueError('metrics tensor be str, got %s' %
                                      repr(ii))
         ls_flt, self.schema = util.flatten(ls)

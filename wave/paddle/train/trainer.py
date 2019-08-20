@@ -301,10 +301,11 @@ def train_and_eval(_shit=None,
         for ds in ds_list:
             ds.name = 'eval'
         first = ds_list[0]
-        if any((first != d for d in ds_list[1:])):
-            raise ValueError(
-                'eval dataset has different output_shapes or types:' %
-                repr(ds_list))
+        for d in ds_list[1:]:
+            if not first.__eq__(d):
+                raise ValueError(
+                    'eval dataset has different output_shapes or types: %s' %
+                    repr(ds_list))
         eval_program = {}
         for name, ds in six.iteritems(eval_dataset):
             program = F.Program()

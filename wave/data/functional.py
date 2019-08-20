@@ -246,6 +246,10 @@ class Dataset(object):
         self.generator = None
         self.pyreader = None
 
+    def __repr__(self):
+        return 'Dataset: name: %s, data_shapes %s, data_types %s' % (
+            self.name, self._data_shapes, self._data_types)
+
     def __eq__(self, other):
         return self.name == other.name and \
                self._data_shapes == other._data_shapes and \

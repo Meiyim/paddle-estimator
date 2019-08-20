@@ -115,7 +115,7 @@ class Saver(object):
         try:
             shutil.rmtree(save_dir)
             shutil.rmtree(tmp_dir)
-        except FileNotFoundError:
+        except OSError:
             pass
         log.info('saving step %d to %s' % (state.gstep, save_dir))
         F.io.save_persistables(self._exe, tmp_dir, self._program)
