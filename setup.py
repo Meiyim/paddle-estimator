@@ -23,6 +23,8 @@ def get_dist(pkgname):
         return None
 
 
+install_deps = []
+
 if get_dist('paddlepaddle') is None and get_dist('paddlepaddle_gpu') is None:
     install_deps.append('paddlepaddle')
 
@@ -34,6 +36,6 @@ setup(
     author='Chen Xuyi',
     author_email='chen_xuyi@outlook.com',
     license='Apache 2.0',
-    packages=['paddle-wave'],
+    packages=['wave'],
     python_requires='>= 2.6.*',
     install_requires=install_deps)
