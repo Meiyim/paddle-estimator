@@ -16,7 +16,6 @@ from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
 
-
 import os
 import time
 import numpy as np
@@ -28,14 +27,15 @@ import paddle.fluid.layers as L
 
 from random import random
 
-import atarashi
-import atarashi.data
-import atarashi.train
-from atarashi.train import exporter, Model
-from atarashi import log
+import wave
+import wave.data
+import wave.train
+from wave.train import exporter, Model
+from wave import log
 
 # 你可以使用任何你喜欢的paddle框架，来构建网络. 比如PARL
 #import parl.layers  as L
+
 
 class ToyModel(Model):
     """
@@ -56,32 +56,43 @@ class ToyModel(Model):
         self.mode = mode
 
     def forward(self, features):
-
         def FC(inputs, name, i, act):
-            return L.fc(
-                    inputs,
-                    self.hidden_size,
-                    act=act, 
-                    param_attr=F.ParamAttr(name='%s.fc.w_%d' % (name, i), initializer=F.initializer.XavierInitializer(fan_in=self.hidden_size, fan_out=self.hidden_size)),
-                    bias_attr=F.ParamAttr(name='%s.fc.b_%d' % (name, i), initializer=F.initializer.Constant(0.)))
+            return L.fc(inputs,
+                        self.hidden_size,
+                        act=act,
+                        param_attr=F.ParamAttr(
+                            name='%s.fc.w_%d' % (name, i),
+                            initializer=F.initializer.XavierInitializer(
+                                fan_in=self.hidden_size,
+                                fan_out=self.hidden_size)),
+                        bias_attr=F.ParamAttr(
+                            name='%s.fc.b_%d' % (name, i),
+                            initializer=F.initializer.Constant(0.)))
 
         title_ids, comment_ids = features
 
-        embedding_attr = F.ParamAttr(name='emb', initializer=F.initializer.XavierInitializer(fan_in=self.vocab_size, fan_out=self.embedding_size))
+        embedding_attr = F.ParamAttr(
+            name='emb',
+            initializer=F.initializer.XavierInitializer(
+                fan_in=self.vocab_size, fan_out=self.embedding_size))
 
-        title_encoded = L.embedding(title_ids, [self.vocab_size, self.embedding_size], param_attr=embedding_attr)
-        comment_encoded = L.embedding(comment_ids, [self.vocab_size, self.embedding_size], param_attr=embedding_attr)
+        title_encoded = L.embedding(
+            title_ids, [self.vocab_size, self.embedding_size],
+            param_attr=embedding_attr)
+        comment_encoded = L.embedding(
+            comment_ids, [self.vocab_size, self.embedding_size],
+            param_attr=embedding_attr)
 
         # Vsum
         zero = L.fill_constant(shape=[1], dtype='int64', value=0)
         title_pad = L.cast(L.logical_not(L.equal(title_ids, zero)), 'float32')
-        comment_pad = L.cast(L.logical_not(L.equal(comment_ids, zero)), 'float32')
+        comment_pad = L.cast(
+            L.logical_not(L.equal(comment_ids, zero)), 'float32')
 
         title_encoded = L.reduce_sum(title_encoded * title_pad, dim=1)
         title_encoded = L.softsign(title_encoded)
         comment_encoded = L.reduce_sum(comment_encoded * comment_pad, dim=1)
         comment_encoded = L.softsign(comment_encoded)
-
 
         for i in range(self.num_layers):
             title_encoded = FC(title_encoded, 'title', i, 'tanh')
@@ -89,26 +100,32 @@ class ToyModel(Model):
         for i in range(self.num_layers):
             comment_encoded = FC(comment_encoded, 'comment', i, 'tanh')
 
-        score = L.reduce_sum(title_encoded * comment_encoded, dim=1, keep_dim=True) / np.sqrt(self.hidden_size)
-        if self.mode is atarashi.RunMode.PREDICT:
+        score = L.reduce_sum(
+            title_encoded * comment_encoded, dim=1,
+            keep_dim=True) / np.sqrt(self.hidden_size)
+        if self.mode is wave.RunMode.PREDICT:
             probs = L.sigmoid(score)
             return probs
         else:
             return score
 
     def loss(self, predictions, labels):
-        per_example_loss = L.sigmoid_cross_entropy_with_logits(predictions, L.cast(labels, 'float32')) 
+        per_example_loss = L.sigmoid_cross_entropy_with_logits(
+            predictions, L.cast(labels, 'float32'))
         loss = L.reduce_mean(per_example_loss)
         return loss
 
     def backward(self, loss):
         optimizer = F.optimizer.AdamOptimizer(learning_rate=self.learning_rate)
         _, var_and_grads = optimizer.minimize(loss)
-        return 
+        return
 
     def metrics(self, predictions, label):
-        auc = atarashi.metrics.Auc(label, L.sigmoid(predictions))
-        acc = atarashi.metrics.Acc(label, L.unsqueeze(L.argmax(predictions, axis=1), axes=[1]))
+        auc = wave.metrics.Auc(label, L.sigmoid(predictions))
+        acc = wave.metrics.Acc(label,
+                               L.unsqueeze(
+                                   L.argmax(
+                                       predictions, axis=1), axes=[1]))
         return {'acc': acc, 'auc': auc}
 
 
@@ -116,8 +133,7 @@ def make_test_data():
     if not os.path.exists('./train'):
         os.mkdir('./train')
     with open('./train/part-0', 'w') as f:
-        f.write(
-'''pen\ti have a pen\t1
+        f.write('''pen\ti have a pen\t1
 apple\ti have an apple\t1
 apple\toh~ apple pen\t0
 pen\ti have a pen\t1
@@ -126,9 +142,9 @@ pen\toh~ pine apple pen\t1''')
     if not os.path.exists('./dev'):
         os.mkdir('./dev')
     with open('./dev/part-0', 'w') as f:
-        f.write(
-'''pen\ti have a pen\t1
+        f.write('''pen\ti have a pen\t1
 apple\ti have a pen\t0''')
+
 
 def clean():
     os.system('rm -rf train train_gz dev dev_gz model')
@@ -136,7 +152,7 @@ def clean():
 
 if __name__ == '__main__':
     make_test_data()
-    parser = atarashi.ArgumentParser('DAN model with Paddle')
+    parser = wave.ArgumentParser('DAN model with Paddle')
     parser.add_argument('--max_seqlen', type=int, default=128)
     parser.add_argument('--train_data_dir', type=str, default='./train')
     parser.add_argument('--eval_data_dir', type=str, default='./dev')
@@ -153,7 +169,7 @@ if __name__ == '__main__':
         b'oh': 7,
     }
 
-    run_config = atarashi.RunConfig(**{
+    run_config = wave.RunConfig(**{
         'batch_size': 2,
         'model_dir': './model',
         'max_steps': 1000,
@@ -171,22 +187,22 @@ if __name__ == '__main__':
         'learning_rate': 1.e-4,
     }
 
-
     def tokenizer(sen):
         log.debug(sen)
         return sen.split(b' ')
 
-    feature_column = atarashi.data.FeatureColumns([
-            atarashi.data.TextColumn('title', vocab_list=vocab, tokenizer=tokenizer),
-            atarashi.data.TextColumn('comment', vocab_list=vocab, tokenizer=tokenizer),
-            atarashi.data.LabelColumn('label'),
-        ])
+    feature_column = wave.data.FeatureColumns([
+        wave.data.TextColumn(
+            'title', vocab_list=vocab, tokenizer=tokenizer),
+        wave.data.TextColumn(
+            'comment', vocab_list=vocab, tokenizer=tokenizer),
+        wave.data.LabelColumn('label'),
+    ])
 
     def before_batch(a, b, c):
         a = a[:args.max_seqlen]
         b = b[:args.max_seqlen]
         return a, b, c
-
 
     def after_batch(a, b, c):
         a = np.expand_dims(a, axis=-1)
@@ -197,14 +213,14 @@ if __name__ == '__main__':
     train_ds = feature_column.build_dataset('train', data_dir=args.train_data_dir, shuffle=True, repeat=True) \
                                    .map(before_batch) \
                                    .padded_batch(run_config.batch_size, (0, 0, 0)) \
-                                   .map(after_batch) 
+                                   .map(after_batch)
 
     eval_ds = feature_column.build_dataset('eval', data_dir=args.eval_data_dir, shuffle=False, repeat=False) \
                                    .map(before_batch) \
                                    .padded_batch(run_config.batch_size, (0, 0, 0)) \
-                                   .map(after_batch) 
+                                   .map(after_batch)
 
-    shapes = ([-1, -1, 1], [-1, -1, 1], [-1, 1]) 
+    shapes = ([-1, -1, 1], [-1, -1, 1], [-1, 1])
     types = ('int64', 'int64', 'int64')
 
     train_ds.data_shapes = shapes
@@ -212,8 +228,6 @@ if __name__ == '__main__':
     eval_ds.data_shapes = shapes
     eval_ds.data_types = types
 
-    atarashi.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds)
+    wave.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds)
 
     clean()
-
-
