@@ -20,7 +20,7 @@ from __future__ import unicode_literals
 import zmq
 import numpy as np
 
-import wave.service.utils as serv_utils
+import propeller.service.utils as serv_utils
 
 
 class InferenceClient(object):

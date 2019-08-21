@@ -19,7 +19,7 @@ from __future__ import unicode_literals
 import time
 
 import numpy as np
-from wave.service.client import InferenceClient
+from propeller.service.client import InferenceClient
 
 if __name__ == "__main__":
 

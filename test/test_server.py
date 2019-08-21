@@ -18,8 +18,8 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import os
-from wave.service.server import InferenceServer
-from wave.service.server import run_worker
+from propeller.service.server import InferenceServer
+from propeller.service.server import run_worker
 
 if __name__ == "__main__":
     frontend_addr = "tcp://*:5571"
