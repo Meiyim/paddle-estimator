@@ -17,14 +17,9 @@ from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import sys
-import random
-import time
-import struct
-
 import zmq
 import numpy as np
-from wave.service import interface_pb2
+
 import wave.service.utils as serv_utils
 
 
@@ -41,39 +36,8 @@ class InferenceClient(object):
             if not isinstance(arg, np.ndarray):
                 raise ValueError('expect ndarray slot data, got %s' %
                                  repr(arg))
-
-        args = [serv_utils.numpy_to_slot(arg) for arg in args]
-        slots = interface_pb2.Slots(slots=args)
-        self.socket.send(slots.SerializeToString())
-        message = self.socket.recv()
-        slots = interface_pb2.Slots()
-        slots.ParseFromString(message)
-        ret = [serv_utils.slot_to_numpy(r) for r in slots.slots]
+        request = serv_utils.nparray_list_serialize(args)
+        self.socket.send(request)
+        reply = self.socket.recv()
+        ret = serv_utils.nparray_list_deserialize(reply)
         return ret
-
-
-def line2nparray(line):
-    slots = [slot.split(':') for slot in line.split(';')]
-    dtypes = ["int64", "int64", "int64", "float32"]
-    data_list = [
-        np.reshape(
-            np.array(
-                [float(num) for num in data.split(" ")], dtype=dtype),
-            [int(s) for s in shape.split(" ")])
-        for (shape, data), dtype in zip(slots, dtypes)
-    ]
-    return data_list
-
-
-if __name__ == "__main__":
-    data_path = "/home/work/suweiyue/Release/infer_xnli/seq128_data/dev_ds"
-    line = open(data_path).readline().strip('\n')
-    np_array = line2nparray(line)
-    num = 100
-    begin = time.time()
-    client = InferenceClient()
-    for request in range(num):
-        #print(request)
-        ret = client(*np_array)
-        #print(ret)
-    print((time.time() - begin) / num)
