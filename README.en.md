@@ -20,14 +20,14 @@ Wave provide the following benefits:
 ## install
 
 ```script
-cd wave && pip install .
+cd propeller && pip install .
 ```
 
 ## Getting Started
 ```python
 
     #Define model
-    class BowModel(wave.Model):
+    class BowModel(propeller.Model):
         def __init__(self, config, mode):
             self.embedding = Embedding(config['emb_size'], config['vocab_size'])
             self.fc1 = FC(config['hidden_size'])
@@ -54,28 +54,28 @@ cd wave && pip install .
             return {'auc': auc}
 
     # hyper param comes from files/command line prompt/env vir
-    run_config = wave.parse_runconfig(args)
-    hparams = wave.parse_hparam(args)
+    run_config = propeller.parse_runconfig(args)
+    hparams = propeller.parse_hparam(args)
     
     # Define data
     # `FeatureColumns` helps you to organize training/evluation files.
-    feature_column = wave.data.FeatureColumns(columns=[
-            wave.data.TextColumn('query', vocab='./vocab'),
-            wave.data.TextColumn('title', vocab='./vocab'),
-            wave.data.LabelColumn('label'),
+    feature_column = propeller.data.FeatureColumns(columns=[
+            propeller.data.TextColumn('query', vocab='./vocab'),
+            propeller.data.TextColumn('title', vocab='./vocab'),
+            propeller.data.LabelColumn('label'),
         ])
     train_ds = feature_column.build_dataset(data_dir='./data',  shuffle=True, repeat=True)
     eval_ds = feature_column.build_dataset(data_dir='./data', shuffle=False, repeat=False)
 
     # Start training!
-    wave.train_and_eval(BowModel, hparams, run_config, train_ds, eval_ds)
+    propeller.train_and_eval(BowModel, hparams, run_config, train_ds, eval_ds)
 ```
 More detail see example/toy/
 
 ## Main Feature
 1. train_and_eval
 
-    according to user-specified `wave.Model`class，initialize training model in the following 2 modes: 1. TRAIN mode 2. EVAL mode
+    according to user-specified `propeller.Model`class，initialize training model in the following 2 modes: 1. TRAIN mode 2. EVAL mode
     perform train_and_eval
 
 2. FeatureColumns
@@ -86,12 +86,12 @@ More detail see example/toy/
 
 3. Dataset
 
-    `FeatureColumns` generats `Dataset`，or you can call `wave.Dataset.from_generator_func` to build your own `Dataset`.
+    `FeatureColumns` generats `Dataset`，or you can call `propeller.Dataset.from_generator_func` to build your own `Dataset`.
 
 4. Summary
     To trace tensor histogram in training, simply：
     ```python
-        wave.summary.histogram('loss', tensor) 
+        propeller.summary.histogram('loss', tensor) 
     ```
 
 

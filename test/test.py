@@ -27,11 +27,11 @@ import paddle.fluid.layers as L
 
 from random import random
 
-import wave
-import wave.data
-import wave.train
-from wave.train import exporter, Model
-from wave import log
+import propeller
+import propeller.data
+import propeller.train
+from propeller.train import exporter, Model
+from propeller import log
 
 # 你可以使用任何你喜欢的paddle框架，来构建网络. 比如PARL
 #import parl.layers  as L
@@ -103,7 +103,7 @@ class ToyModel(Model):
         score = L.reduce_sum(
             title_encoded * comment_encoded, dim=1,
             keep_dim=True) / np.sqrt(self.hidden_size)
-        if self.mode is wave.RunMode.PREDICT:
+        if self.mode is propeller.RunMode.PREDICT:
             probs = L.sigmoid(score)
             return probs
         else:
@@ -121,11 +121,12 @@ class ToyModel(Model):
         return
 
     def metrics(self, predictions, label):
-        auc = wave.metrics.Auc(label, L.sigmoid(predictions))
-        acc = wave.metrics.Acc(label,
-                               L.unsqueeze(
-                                   L.argmax(
-                                       predictions, axis=1), axes=[1]))
+        auc = propeller.metrics.Auc(label, L.sigmoid(predictions))
+        acc = propeller.metrics.Acc(label,
+                                    L.unsqueeze(
+                                        L.argmax(
+                                            predictions, axis=1),
+                                        axes=[1]))
         return {'acc': acc, 'auc': auc}
 
 
@@ -152,7 +153,7 @@ def clean():
 
 if __name__ == '__main__':
     make_test_data()
-    parser = wave.ArgumentParser('DAN model with Paddle')
+    parser = propeller.ArgumentParser('DAN model with Paddle')
     parser.add_argument('--max_seqlen', type=int, default=128)
     parser.add_argument('--train_data_dir', type=str, default='./train')
     parser.add_argument('--eval_data_dir', type=str, default='./dev')
@@ -169,7 +170,7 @@ if __name__ == '__main__':
         b'oh': 7,
     }
 
-    run_config = wave.RunConfig(**{
+    run_config = propeller.RunConfig(**{
         'batch_size': 2,
         'model_dir': './model',
         'max_steps': 1000,
@@ -191,12 +192,12 @@ if __name__ == '__main__':
         log.debug(sen)
         return sen.split(b' ')
 
-    feature_column = wave.data.FeatureColumns([
-        wave.data.TextColumn(
+    feature_column = propeller.data.FeatureColumns([
+        propeller.data.TextColumn(
             'title', vocab_list=vocab, tokenizer=tokenizer),
-        wave.data.TextColumn(
+        propeller.data.TextColumn(
             'comment', vocab_list=vocab, tokenizer=tokenizer),
-        wave.data.LabelColumn('label'),
+        propeller.data.LabelColumn('label'),
     ])
 
     def before_batch(a, b, c):
@@ -228,6 +229,6 @@ if __name__ == '__main__':
     eval_ds.data_shapes = shapes
     eval_ds.data_types = types
 
-    wave.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds)
+    propeller.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds)
 
     clean()
