@@ -1,6 +1,6 @@
 简体中文|[English](./README.en.md)
-# Introducing paddle-wave
-本文档介绍wave，一种可极大地简化机器学习编程的高阶 Paddle API。wave 会封装下列操作：
+# Introducing paddle-propeller
+本文档介绍propeller，一种可极大地简化机器学习编程的高阶 Paddle API。propeller 会封装下列操作：
 -   训练
 -   评估
 -   预测
@@ -21,13 +21,13 @@ Wave 具有下列优势：
 
 ## install|安装
 
-cd wave && pip install .
+cd propeller && pip install .
 
 ## Getting Started|快速开始
 ```python
 
     #定义训练模型
-    class BowModel(wave.Model):
+    class BowModel(propeller.Model):
         def __init__(self, config, mode):
             self.embedding = Embedding(config['emb_size'], config['vocab_size'])
             self.fc1 = FC(config['hidden_size'])
@@ -54,28 +54,28 @@ cd wave && pip install .
             return {'auc': auc}
 
     # 超参可以来自于文件/ 环境变量/ 命令行
-    run_config = wave.parse_runconfig(args)
-    hparams = wave.parse_hparam(args)
+    run_config = propeller.parse_runconfig(args)
+    hparams = propeller.parse_hparam(args)
     
     # 定义数据： 
     # `FeatureColumns` 用于管理训练、预测文件. 会自动进行二进制化.
-    feature_column = wave.data.FeatureColumns(columns=[
-            wave.data.TextColumn('query', vocab='./vocab'),
-            wave.data.TextColumn('title', vocab='./vocab'),
-            wave.data.LabelColumn('label'),
+    feature_column = propeller.data.FeatureColumns(columns=[
+            propeller.data.TextColumn('query', vocab='./vocab'),
+            propeller.data.TextColumn('title', vocab='./vocab'),
+            propeller.data.LabelColumn('label'),
         ])
     train_ds = feature_column.build_dataset(data_dir='./data',  shuffle=True, repeat=True)
     eval_ds = feature_column.build_dataset(data_dir='./data', shuffle=False, repeat=False)
 
     # 开始训练！
-    wave.train_and_eval(BowModel, hparams, run_config, train_ds, eval_ds)
+    propeller.train_and_eval(BowModel, hparams, run_config, train_ds, eval_ds)
 ```
 先洗详细请见example/toy/
 
 ## 主要构件
 1. train_and_eval
 
-    会根据用户提供的`wave.Model`类，实例化两种模式下的训练模型： 1. TRAIN模式 2. EVAL模式。
+    会根据用户提供的`propeller.Model`类，实例化两种模式下的训练模型： 1. TRAIN模式 2. EVAL模式。
     然后开始训练，同时执行评估（Evaluation）
 
 2. FeatureColumns
@@ -85,12 +85,12 @@ cd wave && pip install .
 
 3. Dataset
 
-    `FeatureColumns`生成`Dataset`，或者您可以调用`wave.Dataset.from_generator_func`来构造自己的`Dataset`，配合shuffle/ interleave/ padded_batch/ repeat 等方法满足定制化需求.
+    `FeatureColumns`生成`Dataset`，或者您可以调用`propeller.Dataset.from_generator_func`来构造自己的`Dataset`，配合shuffle/ interleave/ padded_batch/ repeat 等方法满足定制化需求.
 
 4. Summary
     对训练过程中的某些参数进行log追踪，只需要：
     ```python
-                wave.summary.histogram('loss', tensor) 
+                propeller.summary.histogram('loss', tensor) 
 
     ```
 
@@ -105,5 +105,5 @@ cd wave && pip install .
 
 1. dataset output_types/ output_shapes 自动推断
 2. 自动超参数搜索
-3. wave server
+3. propeller server
 4. ...
