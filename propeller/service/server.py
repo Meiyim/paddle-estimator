@@ -45,7 +45,7 @@ def profile(msg):
 
 
 class Predictor(object):
-    def __init__(self, model_dir, device_idx):
+    def __init__(self, model_dir, device_idx=0):
         import paddle.fluid as F
         log.debug('create predictor on card %d' % device_idx)
         config = F.core.AnalysisConfig(model_dir)
@@ -62,14 +62,19 @@ class Predictor(object):
 
 def run_worker(model_dir, device_idx, endpoint="ipc://worker.ipc"):
     log.debug("run_worker %s" % device_idx)
+    os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv(
+        "CUDA_VISIBLE_DEVICES").split(",")[device_idx]
     import paddle.fluid as F
     from propeller.service import interface_pb2
     import propeller.service.utils as serv_utils
+    log.debug("import %s" % device_idx)
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.connect(endpoint)
     #socket.bind(endpoint)
-    predictor = Predictor(model_dir, device_idx)
+    log.debug("Predictor building %s" % device_idx)
+    predictor = Predictor(model_dir, 0)
+    log.debug("Predictor %s" % device_idx)
     while True:
         #  Wait for next request from client
         message = socket.recv()
