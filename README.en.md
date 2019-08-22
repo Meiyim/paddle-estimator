@@ -1,17 +1,17 @@
-# Introducing Wave
-This doc introduct Wave, a high level paddle API for general ML, Wave encapsulate the following actions:：
+# Introducing Propeller
+This doc introduct Propeller, a high level paddle API for general ML, Propeller encapsulate the following actions:：
 -  training
 -  evaluation
 -  prediction
 -  export serving
   
-Wave provide the following benefits:
+Propeller provide the following benefits:
 
--   You can run Wave-based models on a local host or on a distributed multi-server environment without changing your model. Furthermore, you can run Wave-based models on CPUs, GPUs without recoding your model.
--   Wave simplify sharing implementations between model developers.
--   Wave do many things for you (logging, hot-start...)
--   Wave buids Program and PyReader or you.
--   Wave provide a safe distributed training loop that controls how and when to:
+-   You can run Propeller-based models on a local host or on a distributed multi-server environment without changing your model. Furthermore, you can run Propeller-based models on CPUs, GPUs without recoding your model.
+-   Propeller simplify sharing implementations between model developers.
+-   Propeller do many things for you (logging, hot-start...)
+-   Propeller buids Program and PyReader or you.
+-   Propeller provide a safe distributed training loop that controls how and when to:
     -   build the Program
     -   initialize variables
     -   create checkpoint files and recover from failures
