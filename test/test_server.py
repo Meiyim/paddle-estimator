@@ -22,8 +22,6 @@ from propeller.service.server import InferenceServer
 from propeller.service.server import run_worker
 
 if __name__ == "__main__":
-    frontend_addr = "tcp://*:5571"
     model_dir = "/home/work/suweiyue/Release/infer_xnli/model/"
     n_devices = len(os.getenv("CUDA_VISIBLE_DEVICES").split(","))
-    InferenceServer(frontend_addr, model_dir, n_devices)
-    #run_worker(model_dir, 0, frontend_addr)
+    InferenceServer(model_dir, n_devices).listen(5571)

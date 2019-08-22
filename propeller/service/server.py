@@ -122,7 +122,13 @@ class InferenceProxy(object):
 
 
 class InferenceServer(object):
-    def __init__(self, frontend_addr, model_dir, n_devices):
+    def __init__(self, model_dir, n_devices):
+        self.model_dir = model_dir
+        self.n_devices = n_devices
+
+    def listen(self, port):
+        frontend_addr = "tcp://*:%s" % port
         backend_addr = "ipc://backend.ipc"
-        InferencePredictor(backend_addr, model_dir, n_devices).start()
+        InferencePredictor(backend_addr, self.model_dir,
+                           self.n_devices).start()
         InferenceProxy().listen(frontend_addr, backend_addr)

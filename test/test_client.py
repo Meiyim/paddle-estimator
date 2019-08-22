@@ -35,7 +35,8 @@ if __name__ == "__main__":
         ]
         return data_list
 
-    data_path = "/home/work/suweiyue/Release/infer_xnli/seq128_data/dev_ds"
+    #data_path = "/home/work/suweiyue/Release/infer_xnli/seq128_data/dev_ds"
+    data_path = "/home/work/suweiyue/Share/model-compression/dev"
     address = "tcp://localhost:5571"
     client = InferenceClient(address)
 
@@ -51,4 +52,5 @@ if __name__ == "__main__":
     begin = time.time()
     for np_array in data:
         ret = client(*np_array)
+        print([r.shape for r in ret])
     print((time.time() - begin) / num)
