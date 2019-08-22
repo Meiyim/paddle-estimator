@@ -24,12 +24,12 @@ import propeller.service.utils as serv_utils
 
 
 class InferenceClient(object):
-    def __init__(self):
+    def __init__(self, address):
         port = "5571"
         context = zmq.Context()
         print("Connecting to server...")
         self.socket = context.socket(zmq.REQ)
-        self.socket.connect("tcp://localhost:%s" % port)
+        self.socket.connect(address)
 
     def __call__(self, *args):
         for arg in args:

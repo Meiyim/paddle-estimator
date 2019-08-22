@@ -36,13 +36,19 @@ if __name__ == "__main__":
         return data_list
 
     data_path = "/home/work/suweiyue/Release/infer_xnli/seq128_data/dev_ds"
-    line = open(data_path).readline().strip('\n')
-    np_array = line2nparray(line)
+    address = "tcp://localhost:5571"
+    client = InferenceClient(address)
+
+    data = []
     num = 10
+    with open(data_path) as inf:
+        for idx, line in enumerate(inf):
+            if idx == num:
+                break
+            np_array = line2nparray(line.strip('\n'))
+            data.append(np_array)
+
     begin = time.time()
-    client = InferenceClient()
-    for request in range(num):
-        print(request)
+    for np_array in data:
         ret = client(*np_array)
-        #print(ret)
     print((time.time() - begin) / num)

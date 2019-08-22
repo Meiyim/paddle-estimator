@@ -90,14 +90,10 @@ class InferencePredictor(object):
         self.n_devices = n_devices
         self.pool = multiprocessing.Pool(n_devices)
 
-    def start_async(self):
+    def start(self):
         for device_idx in range(self.n_devices):
             ret = self.pool.apply_async(run_worker, (
                 self.model_dir, device_idx, self.backend_addr))
-
-    def start(self):
-        self.start_async()
-        self.join()
 
     def join(self):
         self.pool.close()
@@ -105,7 +101,7 @@ class InferencePredictor(object):
 
 
 class InferenceProxy(object):
-    def __init__(self, frontend_addr, backend_addr):
+    def listen(self, frontend_addr, backend_addr):
         log.info("InferenceProxy starting...")
         try:
             context = zmq.Context(1)
@@ -128,5 +124,5 @@ class InferenceProxy(object):
 class InferenceServer(object):
     def __init__(self, frontend_addr, model_dir, n_devices):
         backend_addr = "ipc://backend.ipc"
-        InferencePredictor(backend_addr, model_dir, n_devices).start_async()
-        InferenceProxy(frontend_addr, backend_addr)
+        InferencePredictor(backend_addr, model_dir, n_devices).start()
+        InferenceProxy().listen(frontend_addr, backend_addr)
