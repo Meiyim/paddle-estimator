@@ -11,32 +11,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+"""
+    Comment.
+"""
 from __future__ import division
 from __future__ import absolute_import
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import zmq
-import numpy as np
+import os
+from propeller.service.server import InferenceServer
+from propeller.service.server import run_worker
 
-import propeller.service.utils as serv_utils
-
-
-class InferenceClient(object):
-    def __init__(self, address):
-        context = zmq.Context()
-        print("Connecting to server...")
-        self.socket = context.socket(zmq.REQ)
-        self.socket.connect(address)
-
-    def __call__(self, *args):
-        for arg in args:
-            if not isinstance(arg, np.ndarray):
-                raise ValueError('expect ndarray slot data, got %s' %
-                                 repr(arg))
-        request = serv_utils.nparray_list_serialize(args)
-        self.socket.send(request)
-        reply = self.socket.recv()
-        ret = serv_utils.nparray_list_deserialize(reply)
-        return ret
+if __name__ == "__main__":
+    model_dir = "/home/work/suweiyue/Release/infer_xnli/model/"
+    n_devices = len(os.getenv("CUDA_VISIBLE_DEVICES").split(","))
+    InferenceServer(model_dir, n_devices).listen(5571)

@@ -57,8 +57,9 @@ class DistributionStatus(object):
                                      config)
 
             except KeyError as e:
-                raise ValueError('ATARASHI_DISCONFIG wrong: %s not found in %s'
-                                 % (e, repr(dis_config)))
+                raise ValueError(
+                    'PROPELLER_DISCONFIG wrong: %s not found in %s' %
+                    (e, repr(dis_config)))
 
     @property
     def mode(self):
@@ -96,7 +97,7 @@ class DistributionStatus(object):
 
 
 dis_config = propeller.util._get_dict_from_environ_or_json_or_file(
-    None, 'ATARASHI_DISCONFIG')
+    None, 'PROPELLER_DISCONFIG')
 status = DistributionStatus(dis_config)
 
 

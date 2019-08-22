@@ -23,7 +23,6 @@ import numpy as np
 import struct
 
 from propeller.service import interface_pb2
-from propeller.service import interface_pb2_grpc
 
 
 def slot_to_numpy(slot):
@@ -57,3 +56,58 @@ def numpy_to_slot(arr):
     pb = interface_pb2.Slot(
         type=dtype, dims=list(arr.shape), data=arr.tobytes())
     return pb
+
+
+def slot_to_paddlearray(slot):
+    import paddle.fluid.core as core
+    if slot.type == interface_pb2.Slot.FP32:
+        type_str = 'f'
+        dtype = core.PaddleDType.FLOAT32
+    elif slot.type == interface_pb2.Slot.INT32:
+        type_str = 'i'
+        dtype = core.PaddleDType.INT32
+    elif slot.type == interface_pb2.Slot.INT64:
+        type_str = 'q'
+        dtype = core.PaddleDType.INT64
+    else:
+        raise RuntimeError('know type %s' % slot.type)
+    ret = core.PaddleTensor()
+    ret.shape = slot.dims
+    ret.dtype = dtype
+    num = len(slot.data) // struct.calcsize(type_str)
+    arr = struct.unpack('%d%s' % (num, type_str), slot.data)
+    ret.data = core.PaddleBuf(arr)
+    return ret
+
+
+def paddlearray_to_slot(arr):
+    import paddle.fluid.core as core
+    if arr.dtype == core.PaddleDType.FLOAT32:
+        dtype = interface_pb2.Slot.FP32
+        type_str = 'f'
+        arr_data = arr.data.float_data()
+    elif arr.dtype == core.PaddleDType.INT32:
+        dtype = interface_pb2.Slot.INT32
+        type_str = 'i'
+        arr_data = arr.data.int32_data()
+    elif arr.dtype == core.PaddleDType.INT64:
+        dtype = interface_pb2.Slot.INT64
+        type_str = 'q'
+        arr_data = arr.data.int64_data()
+    else:
+        raise RuntimeError('know type %s' % arr.dtype)
+    data = struct.pack('%d%s' % (len(arr_data), type_str), *arr_data)
+    pb = interface_pb2.Slot(type=dtype, dims=list(arr.shape), data=data)
+    return pb
+
+
+def nparray_list_serialize(arr_list):
+    slot_list = [numpy_to_slot(arr) for arr in arr_list]
+    slots = interface_pb2.Slots(slots=slot_list)
+    return slots.SerializeToString()
+
+
+def nparray_list_deserialize(string):
+    slots = interface_pb2.Slots()
+    slots.ParseFromString(string)
+    return [slot_to_numpy(slot) for slot in slots.slots]
