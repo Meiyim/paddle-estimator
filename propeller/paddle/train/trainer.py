@@ -287,7 +287,7 @@ def train_and_eval(_shit=None,
         'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
         % (repr(run_config), repr(params), repr(model_spec)))
 
-    #init distribution env if envvir ATARASHI_DISCONFIG is set
+    #init distribution env if envvir PROPELLER_DISCONFIG is set
     distribution.init_distribuition_env(train_program, startup_prog)
 
     if eval_dataset is not None:

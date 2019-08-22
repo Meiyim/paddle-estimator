@@ -70,7 +70,7 @@ def parse_file(filename):
 
 def parse_runconfig(args=None):
     d = _get_dict_from_environ_or_json_or_file(args.run_config,
-                                               'ATARASHI_RUNCONFIG')
+                                               'PROPELLER_RUNCONFIG')
     if d is None:
         raise ValueError('run_config not found')
     return RunConfig(**d)
@@ -83,7 +83,7 @@ def parse_hparam(args=None):
         hparam_strs = [None]
 
     hparams = [
-        _get_dict_from_environ_or_json_or_file(hp, 'ATARASHI_HPARAMS')
+        _get_dict_from_environ_or_json_or_file(hp, 'PROPELLER_HPARAMS')
         for hp in hparam_strs
     ]
     hparams = [HParams(**h) for h in hparams if h is not None]
