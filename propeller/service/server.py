@@ -47,7 +47,7 @@ def profile(msg):
 class Predictor(object):
     def __init__(self, model_dir, device_idx=0):
         import paddle.fluid as F
-        log.debug('create predictor on card %d' % device_idx)
+        log.info('create predictor on card %d' % device_idx)
         config = F.core.AnalysisConfig(model_dir)
         config.enable_use_gpu(5000, device_idx)
         self._predictor = F.core.create_paddle_predictor(config)
@@ -61,31 +61,40 @@ class Predictor(object):
 
 
 def run_worker(model_dir, device_idx, endpoint="ipc://worker.ipc"):
-    log.debug("run_worker %s" % device_idx)
+    log.info("run_worker %s" % device_idx)
     os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv(
         "CUDA_VISIBLE_DEVICES").split(",")[device_idx]
+    import traceback
     import paddle.fluid as F
     from propeller.service import interface_pb2
     import propeller.service.utils as serv_utils
-    log.debug("import %s" % device_idx)
+    log.info("import %s" % device_idx)
     context = zmq.Context()
     socket = context.socket(zmq.REP)
     socket.connect(endpoint)
     #socket.bind(endpoint)
-    log.debug("Predictor building %s" % device_idx)
-    predictor = Predictor(model_dir, 0)
-    log.debug("Predictor %s" % device_idx)
+    try:
+        log.info("Predictor building %s" % device_idx)
+        predictor = Predictor(model_dir, 0)
+        log.info("Predictor %s" % device_idx)
+    except Exception as e:
+        log.info(str(e))
+
     while True:
         #  Wait for next request from client
-        message = socket.recv()
-        log.debug("get message %s" % device_idx)
-        slots = interface_pb2.Slots()
-        slots.ParseFromString(message)
-        pts = [serv_utils.slot_to_paddlearray(s) for s in slots.slots]
-        ret = predictor(pts)
-        slots = interface_pb2.Slots(
-            slots=[serv_utils.paddlearray_to_slot(r) for r in ret])
-        socket.send(slots.SerializeToString())
+        try:
+            message = socket.recv()
+            log.info("get message %s" % device_idx)
+            slots = interface_pb2.Slots()
+            slots.ParseFromString(message)
+            pts = [serv_utils.slot_to_paddlearray(s) for s in slots.slots]
+            ret = predictor(pts)
+            slots = interface_pb2.Slots(
+                slots=[serv_utils.paddlearray_to_slot(r) for r in ret])
+            socket.send(slots.SerializeToString())
+        except Exception as e:
+            log.info(str(e))
+            traceback.print_exc(file=sys.stdout)
 
 
 class InferencePredictor(object):
@@ -99,6 +108,7 @@ class InferencePredictor(object):
         for device_idx in range(self.n_devices):
             ret = self.pool.apply_async(run_worker, (
                 self.model_dir, device_idx, self.backend_addr))
+        return self
 
     def join(self):
         self.pool.close()
