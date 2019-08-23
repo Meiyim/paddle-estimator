@@ -29,13 +29,13 @@ if get_dist('paddlepaddle') is None and get_dist('paddlepaddle_gpu') is None:
     install_deps.append('paddlepaddle')
 
 setup(
-    name='paddle-propeller',
+    name='propeller',
     version='0.1',
     description='high level paddle-paddle API',
     url='https://github.com/Meiyim/paddle-estimator',
     author='Chen Xuyi',
     author_email='chen_xuyi@outlook.com',
     license='Apache 2.0',
-    packages=['propeller'],
+    packages=find_packages(),
     python_requires='>= 2.6.*',
     install_requires=install_deps)
