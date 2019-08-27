@@ -122,7 +122,7 @@ def run_on_master(func):
     return f
 
 
-def init_distribuition_env(train_program, startup_program):
+def init_distribuition_env(program):
     if status.mode == DistributionMode.LOCAL:
         log.info('Initializing local training')
     elif status.mode == DistributionMode.NCCL:
@@ -132,8 +132,8 @@ def init_distribuition_env(train_program, startup_program):
             status.replica_id,
             trainers=','.join(status._env),
             current_endpoint=status._this,
-            program=train_program,
-            startup_program=startup_program)
+            program=program.train_program,
+            startup_program=program.startup_program)
         log.info('Initializing distribution training with config %s' %
                  (repr(dis_config)))
         if status.is_master:

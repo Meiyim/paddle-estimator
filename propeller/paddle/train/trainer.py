@@ -43,28 +43,32 @@ log = logging.getLogger(__name__)
 __all__ = ['train_and_eval', 'Estimator']
 
 
-def get_parallel_exe(program, loss, dev_count):
-    exec_strategy = F.ExecutionStrategy()
-    exec_strategy.num_threads = 4  #2 for fp32 4 for fp16
-    exec_strategy.use_experimental_executor = True
-    exec_strategy.num_iteration_per_drop_scope = 10  #important shit
+def get_summary_writer(path):
+    summary_writer = None
+    try:
+        from tensorboardX import SummaryWriter
+        if distribution.status.is_master:
+            summary_writer = SummaryWriter(os.path.join(path))
+    except ImportError:
+        log.warning('tensorboardX not installed, will not log to tensorboard')
+    return summary_writer
 
-    build_strategy = F.BuildStrategy()
-    build_strategy.remove_unnecessary_lock = False
-    build_strategy.memory_optimize = True
-    #build_strategy.fuse_broadcast_ops = True
 
-    log.info('replica id %d of %d' % (distribution.status.replica_id,
-                                      distribution.status.num_replica))
-    train_exe = F.ParallelExecutor(
-        use_cuda=True,
-        loss_name=loss.name,
-        build_strategy=build_strategy,
-        exec_strategy=exec_strategy,
-        main_program=program,
-        num_trainers=distribution.status.num_replica,
-        trainer_id=distribution.status.replica_id)
-    return train_exe
+def log_eval_result(name, eval_result, swriter, state):
+    log.debug(eval_result)
+    printable = []
+    for n, val in six.iteritems(eval_result):
+        assert val.shape == (), 'metrics eval use float'
+        printable.append('{}\t{}'.format(n, val))
+        if swriter is not None:
+            swriter.add_scalar(n, val, state.gstep)
+        log.debug('write to tensorboard %s' % swriter.log_dir)
+
+    if len(printable):
+        log.info('*** eval res: %10s ***' % name)
+        for p in printable:
+            log.info(p)
+        log.info('******************************')
 
 
 def build_net(model_fn, features, mode, params, run_config):
@@ -251,16 +255,6 @@ class Estimator(object):
             raise ValueError('expect dataset to be instance of Dataset, got %s'
                              % repr(train_ds))
 
-        summary_writer = None
-        try:
-            from tensorboardX import SummaryWriter
-            if distribution.status.is_master:
-                summary_writer = SummaryWriter(
-                    os.path.join(self.run_config.model_dir, 'train_history'))
-        except ImportError:
-            log.warning(
-                'tensorboardX not installed, will not log to tensorboard')
-
         train_program, model_spec, summary_record = self.build_for_train(
             train_ds)
         train_run_hooks = [
@@ -269,7 +263,8 @@ class Estimator(object):
             hooks.LoggingHook(
                 model_spec.loss,
                 summary_record=summary_record,
-                summary_writer=summary_writer,
+                summary_writer=get_summary_writer(
+                    os.path.join(self.run_config.model_dir, 'train_history')),
                 per_step=self.run_config.log_steps,
                 skip_step=self.run_config.skip_steps),
         ]
@@ -282,6 +277,8 @@ class Estimator(object):
             run_config=self.run_config,
             run_hooks=train_run_hooks, )
 
+        distribution.init_distribuition_env(
+            train_program)  #only initialize distribute training with 
         mon_exe.init_or_restore_variables()
         if distribution.status.is_master:
             mon_exe._hooks.append(
@@ -293,6 +290,7 @@ class Estimator(object):
         with mon_exe:
             for data in train_ds.start():
                 mon_exe.run(feed=data)
+        return mon_exe.result
 
     def evaluate(self, eval_dataset, eval_hooks=[]):
         if not isinstance(eval_dataset, Dataset):
@@ -301,11 +299,11 @@ class Estimator(object):
         program, model_spec = self.build_for_eval(eval_dataset)
         single_card_place = F.cuda_places()[0]
         eval_executor = F.Executor(single_card_place)
+
         eval_hooks = [
-            hooks.EvalHook(
-                'eval',
-                model_spec.metrics,
-                summary_writer=None, )
+            hooks.StopAtStepHook(self.run_config.eval_max_steps,
+                                 self.run_config.eval_max_steps),
+            hooks.EvalHook(model_spec.metrics, )
         ]
 
         mon_exe = MonitoredExecutor(
@@ -318,6 +316,14 @@ class Estimator(object):
         with mon_exe:
             for data in eval_dataset.start(places=[single_card_place]):
                 mon_exe.run(feed=data)
+
+        _, eval_result = mon_exe.result
+
+        summary_writer = get_summary_writer(
+            os.path.join(self.run_config.model_dir, 'eval_history'))
+        log_eval_result('eval', eval_result, summary_writer, mon_exe.state)
+
+        return mon_exe.result
 
     def predict(self, predict_dataset, ckpt=None, steps=-1, split_batch=True):
         '''
@@ -335,7 +341,7 @@ class Estimator(object):
         '''
         if not isinstance(predict_dataset, Dataset):
             raise ValueError('expect dataset to be instance of Dataset, got %s'
-                             % repr(train_ds))
+                             % repr(predict_dataset))
 
         program, model_spec = self.build_for_predict(predict_dataset)
         single_card_place = F.cuda_places()[0]
@@ -412,8 +418,6 @@ def train_and_eval(_shit=None,
             % (model_class_or_model_fn, params, run_config, train_dataset))
 
     #init distribution env if envvir PROPELLER_DISCONFIG is set
-    distribution.init_distribuition_env(train_program, startup_prog)
-
     if eval_dataset is not None:
         if not isinstance(eval_dataset, (dict, Dataset)):
             raise ValueError(
@@ -430,170 +434,49 @@ def train_and_eval(_shit=None,
                 raise ValueError(
                     'eval dataset has different output_shapes or types: %s' %
                     repr(ds_list))
-        eval_program = {}
-        for name, ds in six.iteritems(eval_dataset):
-            program = F.Program()
-            with F.program_guard(program, startup_prog):
-                #share var with Train net
-                with F.unique_name.guard():
-                    log.info('Building Eval Graph')
-                    fea = ds.features()
-                    eval_model_spec = build_net(model_class_or_model_fn, fea,
-                                                RunMode.EVAL, params,
-                                                run_config)
-                    log.info('Done')
-            program = program.clone(for_test=True)
-            eval_program[name] = program
 
-        def evaluate(name, train_state, ds, writer):
-            try:  #[try -> with -> while]
-                program = eval_program[name]
-                eval_hook = hooks.EvalHook(
-                    name,
-                    eval_model_spec.metrics,
-                    summary_writer=writer,
-                )  #summary_writer is defined below...
-                eval_hook.set_train_state(train_state)
-                eval_run_hooks = [eval_hook]
-                if run_config.eval_max_steps is not None:
-                    eval_run_hooks.append(
-                        hooks.StopAtStepHook(
-                            run_config.eval_max_steps,
-                            run_config.eval_max_steps,
-                            msg='evaluating %s' % name))
-                eval_run_hooks.extend(eval_hooks)
-                eval_ds = ds.start(places=[single_card_place])
-                with MonitoredExecutor(
-                        start_exe,
-                        program=program,
-                        run_config=None,
-                        run_hooks=eval_run_hooks, ) as eval_exe:
-                    for data in eval_ds:
-                        eval_exe.run(feed=data)
-            except (F.core.EOFException, StopException):
-                pass
-            return eval_hook.result
+    est = Estimator(model_class_or_model_fn, run_config, params,
+                    warm_start_setting)
 
-        log.info('Eval with: \n> Eval_model_spec %s' % repr(eval_model_spec))
+    class EvalHookOnTrainLoop(hooks.RunHook):
+        def __init__(self):
+            self.program, self.model_spec = est.build_for_eval(
+                list(eval_dataset.values())[
+                    0])  #eval_datasets must have same output shapes
+            self.summary_writer = get_summary_writer(
+                os.path.join(run_config.model_dir, 'eval_history'))
 
-    dev_list = F.cuda_places()  #list all visible divices
-    log.info('Visible device %s' % repr(dev_list))
-    #The order of this 3 steps really matters
-    #1. init train
-    #single_card_place = F.CUDAPlace(0)
-    single_card_place = dev_list[0]
-    start_exe = F.Executor(single_card_place)
-    start_exe.run(startup_prog)
+        def after_run(self, _, state):
+            if state.step > run_config.skip_steps and state.gstep % run_config.eval_steps == 0:
+                eval_results = {}
+                for name, ds in six.iteritems(eval_dataset):
+                    eval_hooks = [
+                        hooks.StopAtStepHook(est.run_config.eval_max_steps,
+                                             est.run_config.eval_max_steps),
+                        hooks.EvalHook(
+                            self.model_spec.metrics,
+                            summary_writer=self.summary_writer, )
+                    ]
+                    single_card_place = F.cuda_places()[0]
+                    eval_executor = F.Executor(single_card_place)
+                    mon_exe = MonitoredExecutor(
+                        eval_executor,
+                        self.program,
+                        run_config=est.run_config,
+                        run_hooks=eval_hooks)
+                    with mon_exe:
+                        for data in ds.start(places=[single_card_place]):
+                            mon_exe.run(feed=data)
+                    _, eval_res = mon_exe.result
+                    eval_results[name] = eval_res
+                    log_eval_result(name, eval_res, self.summary_writer, state)
+                for exporter in exporters:
+                    exporter.export(eval_executor,
+                                    self.program.startup_program,
+                                    self.model_spec, eval_results, state)
+            else:
+                eval_results = {}
+            return eval_results
 
-    #2. restore param
-    if warm_start_setting is not None:
-        if not os.path.exists(warm_start_setting.from_dir):
-            raise ValueError('warm start dir not exists: %s' %
-                             warm_start_setting.from_dir)
-        log.info("warm start from %s" % warm_start_setting.from_dir)
-        if warm_start_setting.predicate_fn is not None:
-
-            def fn(v):
-                ret = warm_start_setting.predicate_fn(v)
-                if ret:
-                    log.info('warm start: %s' % v.name)
-                return ret
-
-            F.io.load_vars(
-                start_exe,
-                warm_start_setting.from_dir,
-                main_program=train_program,
-                predicate=fn)
-        else:
-            raise NotImplementedError()
-
-    saver = Saver(
-        run_config.model_dir,
-        start_exe,
-        program=train_program,
-        max_ckpt_to_keep=run_config.max_ckpt)
-    if saver.last_ckpt is not None:
-        train_init_state = saver.restore()
-    else:
-        train_init_state = None
-
-    #3.create paralle executor(broadcast variable)
-    train_exe = get_parallel_exe(train_program, model_spec.loss, len(dev_list))
-
-    log.info('Device count %d' % F.core.get_cuda_device_count())
-    #log.info('Memory usage per exapmle: %f' % F.contrib.memory_usage(program=train_program, batch_size=run_config.batch_size))
-
-    try:  #[try -> with -> while]
-        summary_writer = None
-        if eval_dataset is not None:
-            eval_summary_writers = {
-                name:
-                None  # summary wirter maybe none if tensorboard is not installed
-                for name, ds in six.iteritems(eval_dataset)
-            }
-        else:
-            eval_summary_writers = None
-        try:
-            from tensorboardX import SummaryWriter
-            if distribution.status.is_master:
-                summary_writer = SummaryWriter(
-                    os.path.join(run_config.model_dir, 'train_history'))
-                if eval_dataset is not None:
-                    eval_summary_writers = {
-                        name: SummaryWriter(
-                            os.path.join(run_config.model_dir,
-                                         os.path.join('eval_history', name)))
-                        for name, ds in six.iteritems(eval_dataset)
-                    }
-        except ImportError:
-            log.warning(
-                'tensorboardX not installed, will not log to tensorboard')
-        summary_record = SummaryRecord(
-            scalar=collections.get(collection.Key.SUMMARY_SCALAR),
-            histogram=collections.get(collection.Key.SUMMARY_HISTOGRAM), )
-
-        train_run_hooks = [
-            hooks.StopAtStepHook(
-                run_config.max_steps, run_config.run_steps, msg='training'),
-            hooks.LoggingHook(
-                model_spec.loss,
-                summary_record=summary_record,
-                summary_writer=summary_writer,
-                per_step=run_config.log_steps,
-                skip_step=run_config.skip_steps),
-        ]
-        train_run_hooks.extend(train_hooks)
-        #initialize here to avoid creating one event file per run
-        with MonitoredExecutor(
-                train_exe,
-                train_program,
-                state=train_init_state,
-                run_config=run_config,
-                run_hooks=train_run_hooks, ) as train_exe:
-            for data in train_dataset.start():
-                train_exe.run(feed=data)  # train
-                # start eval_loop
-                if eval_dataset is not None and \
-                    distribution.status.is_master and \
-                    train_exe.state.gstep % run_config.eval_steps == 0 and \
-                    train_exe.state.gstep > run_config.skip_steps:
-                    eval_result = {}
-                    for name, _ in six.iteritems(eval_dataset):
-                        ret = evaluate(name, train_exe.state,
-                                       eval_dataset[name],
-                                       eval_summary_writers[name])
-                        eval_result[name] = ret
-                    for exporter in exporters:
-                        exporter.export(start_exe, eval_program,
-                                        eval_model_spec, eval_result,
-                                        train_exe.state)
-                    log.debug('eval done')
-    except (F.core.EOFException, StopException):
-        pass
-    finally:
-        if summary_writer is not None:
-            summary_writer.close()
-            if eval_summary_writers is not None:
-                for v in eval_summary_writers.values():
-                    if v is not None:
-                        v.close()
+    res = est.train(train_dataset, train_hooks=[EvalHookOnTrainLoop()])
+    return

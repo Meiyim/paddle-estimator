@@ -191,9 +191,7 @@ class StopAtStepHook(RunHook):
 class EvalHook(RunHook):
     """hook this on a eval Executor"""
 
-    def __init__(self, name, metrics, summary_writer=None):
-        self._name = name
-        self.train_state = None
+    def __init__(self, metrics, summary_writer=None):
         self.writer = summary_writer
         self._result = None
 
@@ -211,9 +209,6 @@ class EvalHook(RunHook):
             self.metrics = list(metrics.values())
         else:
             self.names, self.metrics = [], []
-
-    def set_train_state(self, state):
-        self.train_state = state
 
     def before_train(self):
         for m in self.metrics:
@@ -250,17 +245,8 @@ class EvalHook(RunHook):
         for n, m in zip(self.names, self.metrics):
             val = m.eval()
             self._result[n] = val
-            assert val.shape == (), 'metrics eval use float'
-            printable.append('{}\t{}'.format(n, val))
-            if self.writer is not None:
-                self.writer.add_scalar(n, val, self.train_state.gstep)
-                log.debug('write to tensorboard %s' % self.writer.logdir)
 
-        if len(printable):
-            log.info('*** eval res: %10s ***' % self._name)
-            for p in printable:
-                log.info(p)
-            log.info('******************************')
+        return self.result
 
 
 class CheckpointSaverHook(RunHook):

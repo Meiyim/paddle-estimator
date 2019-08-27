@@ -195,6 +195,7 @@ class MonitoredExecutor(object):
         self._loss = loss
         self._warm_start_setting = warm_start_from
         self._saver = None  # will set in prepare
+        self.result = None  # will set after train
         if run_config is not None:
             self._model_dir = run_config.model_dir
             self._save_dir = run_config.model_dir
@@ -242,6 +243,12 @@ class MonitoredExecutor(object):
             self._state = self._saver.restore()
 
     def freeze(self):
+        if self._loss is None:
+            log.debug('will not freeze a program without loss')
+            return
+        if isinstance(self._program.train_program, F.compiler.CompiledProgram):
+            log.debug('program has already been built')
+            return
         exec_strategy = F.ExecutionStrategy()
         exec_strategy.num_threads = 4  #2 for fp32 4 for fp16
         exec_strategy.use_experimental_executor = True
@@ -272,6 +279,7 @@ class MonitoredExecutor(object):
         log.info('********** Start Loop ************')
         # TODO init
 
+        self.result = None
         for h in self._hooks:
             log.debug('train loop has hook %s' % h)
             h.before_train()
@@ -280,10 +288,12 @@ class MonitoredExecutor(object):
     def run(self, fetch_list=[], *args, **kwargs):
         #log.debug('Executor running step %d' % self._state.gstep)
         if self._hooks:
-            fetch_list = [h.before_run(self._state)
-                          for h in self._hooks] + [fetch_list]  #append at last
+            fetch_list = [fetch_list]
+            for h in self._hooks:
+                #log.debug('calling hook.before_run %s' % h)
+                fetch = h.before_run(self._state)
+                fetch_list.append(fetch)
             fetch_list_len = map(len, fetch_list)
-
             fetch_list, schema = util.flatten(fetch_list)
             #if len(set(fetch_list)) != len(fetch_list):
             #    log.error('strange shit happend when fetch list has idetity tensors %s' % fetch_list)
@@ -297,9 +307,10 @@ class MonitoredExecutor(object):
             #log.debug(res)
 
             res = util.unflatten(res, schema)
+            ret, res = res[0], res[1:]
             for r, h in zip(res, self._hooks):
+                #log.debug('calling hook.after_run')
                 h.after_run(r, self._state)
-            ret = res[-1]  #call results at last
 
             if any(map(lambda i: i.should_stop(self._state), self._hooks)):
                 raise StopException('hook call stop')
@@ -317,8 +328,9 @@ class MonitoredExecutor(object):
                 err_type is StopException) or (err_type is KeyboardInterrupt):
             try:
                 log.info('********** Stop Loop ************')
+                self.result = []
                 for h in self._hooks:
-                    h.after_train()
+                    self.result.append(h.after_train())
             except Exception as e:
                 log.exception('error occur after loop %s' % repr(e))
                 raise e
@@ -328,7 +340,8 @@ class MonitoredExecutor(object):
                           (err_type, err_value))
 
     def merge_result(self, ls):
-        dev_count = len(self._program.train_program._places)
+        dev_count = len(self._program.train_program._places) if isinstance(
+            self._program, F.compiler.CompiledProgram) else 1
         if dev_count == 1:
             return ls
         else:
