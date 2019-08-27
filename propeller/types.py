@@ -85,6 +85,8 @@ RunConfig = namedtuple('RunConfig', [
 ])
 RunConfig.__new__.__defaults__ = (None, ) * len(RunConfig._fields)
 
+ProgramPair = namedtuple('ProgramPair', ['train_program', 'startup_program'])
+
 InferenceSpec = namedtuple('InferenceSpec', ['inputs', 'outputs'])
 
 ModelSpec = namedtuple('ModelSpec', [

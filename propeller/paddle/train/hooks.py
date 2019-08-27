@@ -175,7 +175,7 @@ class LoggingHook(RunHook):
 
 
 class StopAtStepHook(RunHook):
-    def __init__(self, stop_global_step, stop_step, msg=None):
+    def __init__(self, stop_global_step, stop_step):
         self._stop_gstep = stop_global_step
         self._stop_step = stop_step
 

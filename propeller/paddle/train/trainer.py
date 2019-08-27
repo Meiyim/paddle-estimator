@@ -19,6 +19,7 @@ import os
 import itertools
 import six
 import inspect
+from collections import namedtuple
 from contextlib import contextmanager
 from six.moves import zip, map
 import logging
@@ -27,7 +28,7 @@ from time import time
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
-from propeller.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec, InferenceSpec
+from propeller.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec, InferenceSpec, ProgramPair, RunConfig
 from propeller.paddle import summary, collection
 from propeller.paddle.data.functional import Dataset
 from propeller.paddle.train import distribution
@@ -39,7 +40,7 @@ from propeller.paddle.train.monitored_executor import MonitoredExecutor
 
 log = logging.getLogger(__name__)
 
-__all__ = ['train_and_eval', 'predict']
+__all__ = ['train_and_eval', 'Estimator']
 
 
 def get_parallel_exe(program, loss, dev_count):
@@ -66,51 +67,21 @@ def get_parallel_exe(program, loss, dev_count):
     return train_exe
 
 
-def build_net(model_fn_or_model, features, mode, params, run_config):
-    if issubclass(model_fn_or_model, Model):
-
-        def model_fn(features, mode, params, run_config):
-            if mode != RunMode.PREDICT:
-                fea, label = features[:-1], features[-1]
-            else:
-                fea = features
-
-            model = model_fn_or_model(params, mode, run_config=run_config)
-            pred = model.forward(fea)
-
-            if mode == RunMode.TRAIN:
-                loss = model.loss(pred, label)
-                model.backward(loss)
-                return ModelSpec(loss=loss, predictions=pred, mode=mode)
-            elif mode == RunMode.EVAL:
-                loss = model.loss(pred, label)
-                me = model.metrics(pred, label)
-
-                pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
-                inf_spec = InferenceSpec(inputs=fea, outputs=pred_list)
-                if 'loss' not in me:
-                    me['loss'] = metrics.Mean(loss)
-                return ModelSpec(
-                    loss=loss,
-                    predictions=pred,
-                    metrics=me,
-                    mode=mode,
-                    inference_spec=inf_spec)
-            elif mode == RunMode.PREDICT:
-                return ModelSpec(predictions=pred, mode=mode)
-            else:
-                raise RuntimeError('unknown run mode %s' % mode)
-    elif inspect.isfunction(model_fn_or_model):
-        model_fn = model_fn_or_model
-    else:
-        raise ValueError('unknown model %s' % model_fn_or_model)
-
+def build_net(model_fn, features, mode, params, run_config):
     model_spec = model_fn(
         features=features, mode=mode, params=params, run_config=run_config)
+    if not isinstance(model_spec.predictions, list):
+        raise ValueError('model_spec.predictions shuold be list, got %s' %
+                         repr(model_spec.predictions))
+
     if mode == RunMode.TRAIN:
-        assert model_spec.loss is not None
+        if not isinstance(model_spec.loss, F.framework.Variable):
+            raise ValueError('model_spec.metrics should be Variable, got %s' %
+                             repr(model_spec.loss))
     elif mode == RunMode.EVAL:
-        assert model_spec.metrics is not None
+        if not isinstance(model_spec.metrics, dict):
+            raise ValueError('model_spec.metrics should be dict, got %s' %
+                             repr(model_spec.metrics))
     elif mode == RunMode.PREDICT:
         assert model_spec.predictions is not None
     else:
@@ -118,92 +89,280 @@ def build_net(model_fn_or_model, features, mode, params, run_config):
     return model_spec
 
 
-def predict(_shit=None,
-            model_class_or_model_fn=None,
-            params=None,
-            model_dir=None,
-            infer_dataset=None,
-            run_config=None,
-            steps=-1,
-            split_batch=True):
-    '''
-    Perform predictoin
-    will call `model_fn` twice and initiate user-specifed model in `propeller.RunMode.TRAIN` mode and `propeller.RunMode.EVAL` mode
-
-    Args:
+class Estimator(object):
+    def __init__(self,
+                 model_class_or_model_fn,
+                 run_config,
+                 params=None,
+                 warm_start_setting=None):
+        '''
         model_class_or_model_fn(callable|propeller.train.Model): `model_class_or_model_fn` be specified in 2 ways:
             1. subclass of propeller.train.Model which implements:
                 1. \_\_init\_\_       (hyper_param, mode, run_config)
                 2. forward            (features) => (prediction)
+                3. backword           (loss) => None
+                4. loss               (predictoin) => (loss)
+                5. metrics (optional) (prediction) => (dict of propeller.Metrics)
                 
             2. a model_fn takes following args:
                 1. features
                 2. param
                 3. mode
                 4. run_config(optional)
-               and returns a `propeller.ModelSpec` 
+               and returns a `propeller.ModelSpec`
+
         params: any python object, will pass to your `model_fn` or `propeller.train.Model`
-        model_dir (str):  path to your model save directory.
-        infer_dataset (propeller.data.Dataset): should not `shuffle` or `repeat`
-        run_config (propeller.RunConfig): will pass to your  `model_fn` or `propeller.train.Model`
-        steps (int): steps to predict, if -1 is specifed, will stop when `StopException` is raised in `infer_dataset`
-        split_batch (bool): if True, prediction of each example in a batch is returned.
+        run_config (propeller.RunConfig): run_config.max_steps should not be None.
+        warm_start_setting (propeller.WarmStartSetting): Optional. warm start variable will overwrite model variable.
+        '''
+        if run_config.model_dir is None:
+            raise ValueError('model_dir should specified in run_config')
 
-    Yields:
-        Evaluated values of predictions tensors.
+        if issubclass(model_class_or_model_fn, Model):
 
-    '''
-    if _shit is not None:
-        raise ValueError('specify keyword args to this function')
-    if model_class_or_model_fn is None or params is None or model_dir is None or infer_dataset is None:
-        raise ValueError(
-            'some argument is None: model_class_or_model_fn:%s params:%s run_config:%s train_dataset:%s'
-            % (model_class_or_model_fn, params, run_config, train_dataset))
+            def model_fn(features, mode, params, run_config):
+                if mode != RunMode.PREDICT:
+                    fea, label = features[:-1], features[-1]
+                else:
+                    fea = features
 
-    if not os.path.exists(model_dir):
-        raise ValueError('model dir not found %s' % model_dir)
+                model = model_class_or_model_fn(
+                    params, mode, run_config=run_config)
+                pred = model.forward(fea)
+                if isinstance(pred, F.framework.Variable):
+                    prediction = [pred]
+                else:
+                    prediction = pred
+                if mode == RunMode.TRAIN:
+                    loss = model.loss(pred, label)
+                    model.backward(loss)
+                    return ModelSpec(
+                        loss=loss, predictions=prediction, mode=mode)
+                elif mode == RunMode.EVAL:
+                    loss = model.loss(pred, label)
+                    me = model.metrics(pred, label)
 
-    program = F.Program()
-    startup_prog = F.Program()
-    with F.program_guard(program, startup_prog):
-        with F.unique_name.guard():
-            fea = infer_dataset.features()
-            log.info('Building Predict Graph...')
-            model_spec = build_net(model_class_or_model_fn, fea,
-                                   RunMode.PREDICT, params, run_config)
-    program = program.clone(for_test=True)
-    start_exe = F.Executor(F.CUDAPlace(0))
-    start_exe.run(startup_prog)
+                    inf_spec = InferenceSpec(inputs=fea, outputs=prediction)
+                    if 'loss' not in me:
+                        me['loss'] = metrics.Mean(loss)
+                    return ModelSpec(
+                        loss=loss,
+                        predictions=prediction,
+                        metrics=me,
+                        mode=mode,
+                        inference_spec=inf_spec)
+                elif mode == RunMode.PREDICT:
+                    return ModelSpec(predictions=prediction, mode=mode)
+                else:
+                    raise RuntimeError('unknown run mode %s' % mode)
+        elif inspect.isfunction(model_class_or_model_fn):
+            model_fn = model_class_or_model_fn
+        else:
+            raise ValueError('unknown model %s' % model_class_or_model_fn)
 
-    F.io.load_vars(
-        start_exe,
-        model_dir,
-        main_program=program,
-        predicate=F.io.is_persistable)
+        self.model_fn = model_fn
+        self.params = params
+        self.run_config = run_config
+        self.warm_start_setting = warm_start_setting
 
-    pred = model_spec.predictions
-    pred_list = pred if isinstance(pred, (list, tuple)) else [pred]
+    def build_for_train(self, train_dataset):
+        train_dataset.name = 'train'
+        train_program = F.Program()
+        startup_prog = F.Program()
+        with F.program_guard(train_program, startup_prog):
+            with F.unique_name.guard():
+                with collection.Collections() as collections:
+                    log.info('Building Train Graph...')
+                    fea = train_dataset.features()
+                    model_spec = build_net(self.model_fn, fea, RunMode.TRAIN,
+                                           self.params, self.run_config)
+                    log.info('Building Train Graph: Done')
 
-    dev_list = F.cuda_places()  #list all visible divices
-    if len(dev_list) > 1:
-        log.warm(
-            'Executing multi card prediction, No. of cards: %d > 1. will drop remainder'
-            % len(dev_list))
-    predict_exe = get_parallel_exe(program, model_spec.predictions,
-                                   len(dev_list))
-    try:
-        log.info('Runining predict from dir: %s' % model_dir)
-        for data in infer_dataset.start(dev_list):
-            res = predict_exe.run(fetch_list=pred_list, feed=data)
-            if split_batch:
-                res = map(lambda i: i.tolist(), res)
-                res = zip(*res)  # transpose
-                for r in res:
-                    yield r
-            else:
-                yield res
-    except F.core.EOFException:
-        log.debug('Predict done')
+                scalars = collections.get(collection.Key.SUMMARY_SCALAR)
+                histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
+                skip_optimize_ops = collections.get(
+                    collection.Key.SKIP_OPTIMIZE)
+                skip_opt = set()
+                if skip_optimize_ops is not None:
+                    skip_opt |= set(skip_optimize_ops)
+                if scalars is not None:
+                    skip_opt |= {t for _, t in scalars}
+                if histograms is not None:
+                    skip_opt |= {t for _, t in histograms}
+                skip_opt = list(skip_opt)
+                log.info('skip memory optimize for %d ops' % len(skip_opt))
+                log.info('Memory optimizing...')
+                F.memory_optimize(
+                    input_program=train_program, skip_opt_set=skip_opt)
+                log.info('Memory optimizing: Done')
+        log.info(
+            'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
+            % (repr(self.run_config), repr(self.params), repr(model_spec)))
+
+        summary_record = SummaryRecord(
+            scalar=collections.get(collection.Key.SUMMARY_SCALAR),
+            histogram=collections.get(collection.Key.SUMMARY_HISTOGRAM), )
+        return ProgramPair(
+            train_program=train_program,
+            startup_program=startup_prog), model_spec, summary_record
+
+    def build_for_eval(self, ds):
+        ds.name = 'eval'
+        program = F.Program()
+        startup_prog = F.Program()
+        with F.program_guard(program, startup_prog):
+            #share var with Train net
+            with F.unique_name.guard():
+                log.info('Building Eval Graph')
+                fea = ds.features()
+                model_spec = build_net(self.model_fn, fea, RunMode.EVAL,
+                                       self.params, self.run_config)
+                log.info('Done')
+        program = program.clone(for_test=True)
+        log.info(
+            'Eval with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
+            % (repr(self.run_config), repr(self.params), repr(model_spec)))
+        return ProgramPair(
+            train_program=program, startup_program=startup_prog), model_spec
+
+    def build_for_predict(self, ds):
+        ds.name = 'predict'
+        program = F.Program()
+        startup_prog = F.Program()
+        with F.program_guard(program, startup_prog):
+            #share var with Train net
+            with F.unique_name.guard():
+                log.info('Building Predict Graph')
+                fea = ds.features()
+                model_spec = build_net(self.model_fn, fea, RunMode.PREDICT,
+                                       self.params, self.run_config)
+                log.info('Done')
+
+        program = program.clone(for_test=True)
+
+        log.info(
+            'Predict with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
+            % (repr(self.run_config), repr(self.params), repr(model_spec)))
+        return ProgramPair(
+            train_program=program, startup_program=startup_prog), model_spec
+
+    def train(self, train_ds, train_hooks=[]):
+        if not isinstance(train_ds, Dataset):
+            raise ValueError('expect dataset to be instance of Dataset, got %s'
+                             % repr(train_ds))
+
+        summary_writer = None
+        try:
+            from tensorboardX import SummaryWriter
+            if distribution.status.is_master:
+                summary_writer = SummaryWriter(
+                    os.path.join(self.run_config.model_dir, 'train_history'))
+        except ImportError:
+            log.warning(
+                'tensorboardX not installed, will not log to tensorboard')
+
+        train_program, model_spec, summary_record = self.build_for_train(
+            train_ds)
+        train_run_hooks = [
+            hooks.StopAtStepHook(self.run_config.max_steps,
+                                 self.run_config.run_steps),
+            hooks.LoggingHook(
+                model_spec.loss,
+                summary_record=summary_record,
+                summary_writer=summary_writer,
+                per_step=self.run_config.log_steps,
+                skip_step=self.run_config.skip_steps),
+        ]
+        train_run_hooks.extend(train_hooks)
+        train_executor = F.Executor(F.cuda_places()[0])
+
+        mon_exe = MonitoredExecutor(
+            train_executor,
+            train_program,
+            run_config=self.run_config,
+            run_hooks=train_run_hooks, )
+
+        mon_exe.init_or_restore_variables()
+        if distribution.status.is_master:
+            mon_exe._hooks.append(
+                hooks.CheckpointSaverHook(
+                    mon_exe._saver,
+                    per_step=mon_exe._save_steps,
+                    skip_step=mon_exe._skip_steps))
+
+        with mon_exe:
+            for data in train_ds.start():
+                mon_exe.run(feed=data)
+
+    def evaluate(self, eval_dataset, eval_hooks=[]):
+        if not isinstance(eval_dataset, Dataset):
+            raise ValueError('expect dataset to be instance of Dataset, got %s'
+                             % repr(eval_dataset))
+        program, model_spec = self.build_for_eval(eval_dataset)
+        single_card_place = F.cuda_places()[0]
+        eval_executor = F.Executor(single_card_place)
+        eval_hooks = [
+            hooks.EvalHook(
+                'eval',
+                model_spec.metrics,
+                summary_writer=None, )
+        ]
+
+        mon_exe = MonitoredExecutor(
+            eval_executor,
+            program,
+            run_config=self.run_config,
+            run_hooks=eval_hooks)
+        mon_exe.init_or_restore_variables()
+
+        with mon_exe:
+            for data in eval_dataset.start(places=[single_card_place]):
+                mon_exe.run(feed=data)
+
+    def predict(self, predict_dataset, ckpt=None, steps=-1, split_batch=True):
+        '''
+        Perform predictoin
+        will call `model_fn` and initiate user-specifed model in `propeller.RunMode.PREDICT` mode 
+
+        Args:
+            infer_dataset (propeller.data.Dataset): should not `shuffle` or `repeat`
+            steps (int): steps to predict, if -1 is specifed, will stop when `StopException` is raised in `infer_dataset`
+            split_batch (bool): if True, prediction of each example in a batch is returned.
+
+        Yields:
+            Evaluated values of predictions tensors.
+
+        '''
+        if not isinstance(predict_dataset, Dataset):
+            raise ValueError('expect dataset to be instance of Dataset, got %s'
+                             % repr(train_ds))
+
+        program, model_spec = self.build_for_predict(predict_dataset)
+        single_card_place = F.cuda_places()[0]
+        executor = F.Executor(single_card_place)
+        pred_run_config = RunConfig(
+            run_steps=steps if steps == -1 else None,
+            model_dir=self.run_config.model_dir)
+        mon_exe = MonitoredExecutor(
+            executor,
+            program,
+            run_config=pred_run_config, )
+        mon_exe.init_or_restore_variables()
+        with mon_exe:
+            mon_exe._state = mon_exe._saver.restore(ckpt)
+            for data in predict_dataset.start(places=[single_card_place]):
+                mon_exe.run(feed=data)
+            log.info('Runining predict from dir: %s' % repr(mon_exe.state))
+            single_card_place = F.cuda_places()[0]
+            for data in predict_dataset.start(places=[single_card_place]):
+                res = mon_exe.run(fetch_list=model_spec.predictions, feed=data)
+                if split_batch:
+                    res = map(lambda i: i.tolist(), res)
+                    res = zip(*res)  # transpose
+                    for r in res:
+                        yield r
+                else:
+                    yield res
 
 
 def train_and_eval(_shit=None,
@@ -251,34 +410,6 @@ def train_and_eval(_shit=None,
         raise ValueError(
             'some argument is None: model_class_or_model_fn:%s params:%s run_config:%s train_dataset:%s'
             % (model_class_or_model_fn, params, run_config, train_dataset))
-    train_dataset.name = 'train'
-    train_program = F.Program()
-    startup_prog = F.Program()
-    with F.program_guard(train_program, startup_prog):
-        with F.unique_name.guard():
-            with collection.Collections() as collections:
-                log.info('Building Train Graph...')
-                fea = train_dataset.features()
-                model_spec = build_net(model_class_or_model_fn, fea,
-                                       RunMode.TRAIN, params, run_config)
-                model_spec.loss.persistable = True
-                log.info('Building Train Graph: Done')
-
-            scalars = collections.get(collection.Key.SUMMARY_SCALAR)
-            histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
-            skip_optimize_ops = collections.get(collection.Key.SKIP_OPTIMIZE)
-            skip_opt = set()
-            if skip_optimize_ops is not None:
-                skip_opt |= set(skip_optimize_ops)
-            if scalars is not None:
-                skip_opt |= {t for _, t in scalars}
-            if histograms is not None:
-                skip_opt |= {t for _, t in histograms}
-            skip_opt = list(skip_opt)
-
-    log.info(
-        'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
-        % (repr(run_config), repr(params), repr(model_spec)))
 
     #init distribution env if envvir PROPELLER_DISCONFIG is set
     distribution.init_distribuition_env(train_program, startup_prog)
@@ -347,12 +478,6 @@ def train_and_eval(_shit=None,
 
     dev_list = F.cuda_places()  #list all visible divices
     log.info('Visible device %s' % repr(dev_list))
-    #dev_list = [int(i) for i in os.environ.get('FLAGS_selected_gpus').split(',')]
-    #log.debug('GPU list is specified %s' % repr(dev_list))
-    #dev_count = len(dev_list)
-
-    #param broadcast happened when creating ParallelProgram, init before this
-
     #The order of this 3 steps really matters
     #1. init train
     #single_card_place = F.CUDAPlace(0)
@@ -437,14 +562,6 @@ def train_and_eval(_shit=None,
                 per_step=run_config.log_steps,
                 skip_step=run_config.skip_steps),
         ]
-        if distribution.status.is_master:
-            train_run_hooks += [
-                hooks.CheckpointSaverHook(
-                    saver,
-                    per_step=run_config.save_steps,
-                    skip_step=run_config.skip_steps),
-            ]
-
         train_run_hooks.extend(train_hooks)
         #initialize here to avoid creating one event file per run
         with MonitoredExecutor(
