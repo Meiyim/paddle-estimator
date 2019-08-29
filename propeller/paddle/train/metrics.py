@@ -55,8 +55,8 @@ class Mean(Metrics):
 
     @property
     def tensor(self):
-        self.t.persitable = True
-        return self.t.name,
+        self.t.persistable = True
+        return self.t,
 
     def update(self, args):
         t, = args
@@ -79,8 +79,8 @@ class Acc(Mean):
 
     @property
     def tensor(self):
-        self.eq.persitable = True
-        return self.eq.name,
+        self.eq.persistable = True
+        return self.eq,
 
 
 class Precision(Metrics):
@@ -95,8 +95,8 @@ class Precision(Metrics):
 
     @property
     def tensor(self):
-        self.label.persitable = True
-        self.pred.persitable = True
+        self.label.persistable = True
+        self.pred.persistable = True
         return self.label.name, self.pred.name
 
     def update(self, args):
@@ -145,9 +145,9 @@ class Auc(Metrics):
 
     @property
     def tensor(self):
-        self.pred.persitable = True
-        self.label.persitable = True
-        return [self.pred.name, self.label.name]
+        self.pred.persistable = True
+        self.label.persistable = True
+        return [self.pred, self.label]
 
     def update(self, args):
         pred, label = args
@@ -189,10 +189,10 @@ class Mrr(Metrics):
 
     @property
     def tensor(self):
-        self.qid.persitable = True
-        self.label.persitable = True
-        self.pred.persitable = True
-        return [self.qid.name, self.label.name, self.pred.name]
+        self.qid.persistable = True
+        self.label.persistable = True
+        self.pred.persistable = True
+        return [self.qid, self.label, self.pred]
 
     def update(self, args):
         qid, label, pred = args
@@ -293,10 +293,10 @@ class ChunkF1(Metrics):
 
     @property
     def tensor(self):
-        self.pred.persitable = True
-        self.label.persitable = True
-        self.seqlen.persitable = True
-        return [self.pred.name, self.label.name, self.seqlen.name]
+        self.pred.persistable = True
+        self.label.persistable = True
+        self.seqlen.persistable = True
+        return [self.pred, self.label, self.seqlen]
 
     def update(self, args):
         pred, label, seqlen = args
@@ -364,10 +364,10 @@ class PNRatio(Metrics):
 
     @property
     def tensor(self):
-        self.qid.persitable = True
-        self.label.persitable = True
-        self.pred.persitable = True
-        return [self.qid.name, self.label.name, self.pred.name]
+        self.qid.persistable = True
+        self.label.persistable = True
+        self.pred.persistable = True
+        return [self.qid, self.label, self.pred]
 
     def update(self, args):
         qid, label, pred = args
@@ -446,10 +446,10 @@ class PrecisionAtK(Metrics):
 
     @property
     def tensor(self):
-        self.qid.persitable = True
-        self.label.persitable = True
-        self.pred.persitable = True
-        return [self.qid.name, self.label.name, self.pred.name]
+        self.qid.persistable = True
+        self.label.persistable = True
+        self.pred.persistable = True
+        return [self.qid, self.label, self.pred]
 
     def update(self, args):
         qid, label, pred = args

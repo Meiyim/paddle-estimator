@@ -100,7 +100,7 @@ class LoggingHook(RunHook):
         if per_step is None or skip_step is None:
             raise ValueError('wrong step argument, per step: %d skip_step %d' %
                              (per_step, skip_step))
-        self.loss = loss.name
+        self.loss = loss
         self.per_step = per_step
         self.skip_step = skip_step
         self.summary_record = summary_record
@@ -227,9 +227,10 @@ class EvalHook(RunHook):
                     'metrics should return tuple or list of tensors, got %s' %
                     repr(i))
             for ii in i:
-                if not isinstance(ii, six.string_types):
-                    raise ValueError('metrics tensor be str, got %s' %
-                                     repr(ii))
+                if not isinstance(ii, F.framework.Variable):
+                    raise ValueError(
+                        'metrics tensor be propeller.train.Metrics, got %s' %
+                        repr(ii))
         ls_flt, self.schema = util.flatten(ls)
         #log.debug(ls_flt)
         return ls_flt

@@ -50,6 +50,7 @@ def get_parallel_exe(program, loss, dev_count):
 
     build_strategy = F.BuildStrategy()
     build_strategy.remove_unnecessary_lock = False
+    build_strategy.memory_optimize = True
     #build_strategy.fuse_broadcast_ops = True
 
     log.info('replica id %d of %d' % (distribution.status.replica_id,
@@ -170,10 +171,6 @@ def predict(_shit=None,
             log.info('Building Predict Graph...')
             model_spec = build_net(model_class_or_model_fn, fea,
                                    RunMode.PREDICT, params, run_config)
-            log.info('Building Predict Graph: Done')
-            log.info('Memory optimizing...')
-            F.memory_optimize(input_program=program)
-            log.info('Memory optimizing: Done')
     program = program.clone(for_test=True)
     start_exe = F.Executor(F.CUDAPlace(0))
     start_exe.run(startup_prog)
@@ -264,6 +261,7 @@ def train_and_eval(_shit=None,
                 fea = train_dataset.features()
                 model_spec = build_net(model_class_or_model_fn, fea,
                                        RunMode.TRAIN, params, run_config)
+                model_spec.loss.persistable = True
                 log.info('Building Train Graph: Done')
 
             scalars = collections.get(collection.Key.SUMMARY_SCALAR)
@@ -277,11 +275,6 @@ def train_and_eval(_shit=None,
             if histograms is not None:
                 skip_opt |= {t for _, t in histograms}
             skip_opt = list(skip_opt)
-            log.info('skip memory optimize for %d ops' % len(skip_opt))
-            log.info('Memory optimizing...')
-            F.memory_optimize(
-                input_program=train_program, skip_opt_set=skip_opt)
-            log.info('Memory optimizing: Done')
 
     log.info(
         'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
