@@ -179,7 +179,7 @@ def padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
                 if (not np.isscalar(elem)) and elem.shape != ():
                     max_len = max(map(len,
                                       e)) if max_seqlen is None else max_seqlen
-                    e = map(lambda i: np.pad(i, [0, max_len - len(i)] if max_len >= len(i) else i[: max_len], 'constant', constant_values=pv), e)
+                    e = map(lambda i: np.pad(i, [0, max_len - len(i)], 'constant', constant_values=pv) if max_len >= len(i) else i[: max_len], e)
                 padded.append(np.stack(list(e)))
             yield padded
 
