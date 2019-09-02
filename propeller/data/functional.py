@@ -159,6 +159,11 @@ def take_func(dataset, count):
     return gen
 
 
+def buffered_func(dataset, size):
+    import paddle
+    return paddle.reader.buffered(dataset, size)
+
+
 def padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
     def gen():
         iterable = dataset()
@@ -359,4 +364,8 @@ class Dataset(object):
 
     def take(self, count=1):
         func = functools.partial(take_func, count=count)
+        return self.apply(func)
+
+    def buffered(self, size=10):
+        func = functools.partial(buffered_func, size=size)
         return self.apply(func)

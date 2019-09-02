@@ -72,20 +72,27 @@ def run_worker(model_dir, device_idx, endpoint="ipc://worker.ipc"):
     socket = context.socket(zmq.REP)
     socket.connect(endpoint)
     #socket.bind(endpoint)
-    log.debug("Predictor building %s" % device_idx)
-    predictor = Predictor(model_dir, 0)
-    log.debug("Predictor %s" % device_idx)
+    try:
+        log.debug("Predictor building %s" % device_idx)
+        predictor = Predictor(model_dir, 0)
+        log.debug("Predictor %s" % device_idx)
+    except Exception as e:
+        log.exception(e)
+
     while True:
         #  Wait for next request from client
-        message = socket.recv()
-        log.debug("get message %s" % device_idx)
-        slots = interface_pb2.Slots()
-        slots.ParseFromString(message)
-        pts = [serv_utils.slot_to_paddlearray(s) for s in slots.slots]
-        ret = predictor(pts)
-        slots = interface_pb2.Slots(
-            slots=[serv_utils.paddlearray_to_slot(r) for r in ret])
-        socket.send(slots.SerializeToString())
+        try:
+            message = socket.recv()
+            log.debug("get message %s" % device_idx)
+            slots = interface_pb2.Slots()
+            slots.ParseFromString(message)
+            pts = [serv_utils.slot_to_paddlearray(s) for s in slots.slots]
+            ret = predictor(pts)
+            slots = interface_pb2.Slots(
+                slots=[serv_utils.paddlearray_to_slot(r) for r in ret])
+            socket.send(slots.SerializeToString())
+        except Exception as e:
+            log.exception(e)
 
 
 class InferencePredictor(object):
@@ -99,6 +106,7 @@ class InferencePredictor(object):
         for device_idx in range(self.n_devices):
             ret = self.pool.apply_async(run_worker, (
                 self.model_dir, device_idx, self.backend_addr))
+        return self
 
     def join(self):
         self.pool.close()
@@ -119,6 +127,7 @@ class InferenceProxy(object):
             log.info("Queue init done")
             zmq.device(zmq.QUEUE, frontend, backend)
         except Exception as e:
+            log.exception(e)
             log.info("Bringing down zmq device")
         finally:
             frontend.close()

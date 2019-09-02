@@ -83,6 +83,29 @@ class Acc(Mean):
         return self.eq,
 
 
+class MSE(Mean):
+    def __init__(self, label, pred):
+        diff = pred - label
+        self.mse = diff * diff
+        self.reset()
+
+    @property
+    def tensor(self):
+        self.mse.persistable = True
+        return self.mse,
+
+
+class Cosine(Mean):
+    def __init__(self, label, pred):
+        self.cos = L.cos_sim(label, pred)
+        self.reset()
+
+    @property
+    def tensor(self):
+        self.cos.persistable = True
+        return self.cos,
+
+
 class Precision(Metrics):
     def __init__(self, label, pred):
         self.label = label
