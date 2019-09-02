@@ -40,7 +40,7 @@ from propeller.paddle.train.monitored_executor import MonitoredExecutor
 
 log = logging.getLogger(__name__)
 
-__all__ = ['train_and_eval', 'Estimator']
+__all__ = ['train_and_eval', 'Learner']
 
 
 def get_summary_writer(path):
@@ -94,7 +94,7 @@ def build_net(model_fn, features, mode, params, run_config):
     return model_spec
 
 
-class Estimator(object):
+class Learner(object):
     def __init__(self,
                  model_class_or_model_fn,
                  run_config,
@@ -416,24 +416,29 @@ def train_and_eval(_shit=None,
             % (model_class_or_model_fn, params, run_config, train_dataset))
 
     #init distribution env if envvir PROPELLER_DISCONFIG is set
-    if eval_dataset is not None:
-        if not isinstance(eval_dataset, (dict, Dataset)):
-            raise ValueError(
-                'Eval dataset should be propeller.Dataset of a list of that, got: %s'
-                % eval_dataset)
-        if isinstance(eval_dataset, Dataset):
-            eval_dataset = {'eval': eval_dataset}
-        ds_list = list(eval_dataset.values())
-        for ds in ds_list:
-            ds.name = 'eval'
-        first = ds_list[0]
-        for d in ds_list[1:]:
-            if not first.__eq__(d):
-                raise ValueError(
-                    'eval dataset has different output_shapes or types: %s' %
-                    repr(ds_list))
+    if train_dataset is None:
+        raise ValueError('train dataset not specified')
 
-    est = Estimator(
+    if eval_dataset is None:
+        raise ValueError('eval dataset not specifed')
+
+    if not isinstance(eval_dataset, (dict, Dataset)):
+        raise ValueError(
+            'Eval dataset should be propeller.Dataset of a list of that, got: %s'
+            % eval_dataset)
+    if isinstance(eval_dataset, Dataset):
+        eval_dataset = {'eval': eval_dataset}
+    ds_list = list(eval_dataset.values())
+    for ds in ds_list:
+        ds.name = 'eval'
+    first = ds_list[0]
+    for d in ds_list[1:]:
+        if not first.__eq__(d):
+            raise ValueError(
+                'eval dataset has different output_shapes or types: %s' %
+                repr(ds_list))
+
+    est = Learner(
         model_class_or_model_fn,
         run_config,
         params,
