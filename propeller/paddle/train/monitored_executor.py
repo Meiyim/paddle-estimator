@@ -141,14 +141,17 @@ class Saver(object):
     def restore(self, ckpt=-1):
         if not isinstance(ckpt, (int, ) + six.string_types):
             raise ValueError('ckpt type not understood %s' % repr(ckpt))
-        if isinstance(ckpt, int) and abs(ckpt) >= len(self.ckpt_list):
-            raise ValueError('invalid restore ckpt number %d' % ckpt)
+        if isinstance(ckpt, int):
+            try:
+                ckpt = self.ckpt_list[ckpt]
+            except IndexError:
+                raise ValueError('invalid restore ckpt number %d' % ckpt)
         if isinstance(ckpt, six.string_types):
-            if ckpt not in self.ckpt_list:
+            try:
+                ckpt = self.ckpt_list.index(ckpt)
+            except ValueError:
                 raise ValueError('ckpt: %s not in ckpt list: %s' %
                                  (ckpt, self.ckpt_list))
-            else:
-                ckpt = self.ckpt_list.index(ckpt)
 
         path = os.path.join(self._save_dir, self.ckpt_list[ckpt])
         meta_file = os.path.join(path, 'meta')
@@ -259,13 +262,14 @@ class MonitoredExecutor(object):
         #build_strategy.fuse_broadcast_ops = True
         build_strategy.num_trainers = distribution.status.num_replica
         build_strategy.trainer_id = distribution.status.replica_id
+        build_strategy.memory_optimize = True
 
         log.info('replica id %d of %d' % (distribution.status.replica_id,
                                           distribution.status.num_replica))
 
         program = F.CompiledProgram(
             self._program.train_program).with_data_parallel(
-                loss_name=self._loss,
+                loss_name=self._loss.name,
                 build_strategy=build_strategy,
                 exec_strategy=exec_strategy)
         self._program = ProgramPair(
@@ -295,10 +299,12 @@ class MonitoredExecutor(object):
                 fetch_list.append(fetch)
             fetch_list_len = map(len, fetch_list)
             fetch_list, schema = util.flatten(fetch_list)
+            fetch_list = [
+                f.name if not isinstance(f, six.string_types) else f
+                for f in fetch_list
+            ]
             #if len(set(fetch_list)) != len(fetch_list):
             #    log.error('strange shit happend when fetch list has idetity tensors %s' % fetch_list)
-
-            #log.debug(fetch_list)
             res = self._exe.run(self._program.train_program,
                                 fetch_list=fetch_list,
                                 *args,
@@ -341,7 +347,7 @@ class MonitoredExecutor(object):
 
     def merge_result(self, ls):
         dev_count = len(self._program.train_program._places) if isinstance(
-            self._program, F.compiler.CompiledProgram) else 1
+            self._program.train_program, F.compiler.CompiledProgram) else 1
         if dev_count == 1:
             return ls
         else:

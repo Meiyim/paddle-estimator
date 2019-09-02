@@ -82,6 +82,7 @@ def build_net(model_fn, features, mode, params, run_config):
         if not isinstance(model_spec.loss, F.framework.Variable):
             raise ValueError('model_spec.metrics should be Variable, got %s' %
                              repr(model_spec.loss))
+        model_spec.loss.persistable = True
     elif mode == RunMode.EVAL:
         if not isinstance(model_spec.metrics, dict):
             raise ValueError('model_spec.metrics should be dict, got %s' %
@@ -194,11 +195,6 @@ class Estimator(object):
                 if histograms is not None:
                     skip_opt |= {t for _, t in histograms}
                 skip_opt = list(skip_opt)
-                log.info('skip memory optimize for %d ops' % len(skip_opt))
-                log.info('Memory optimizing...')
-                F.memory_optimize(
-                    input_program=train_program, skip_opt_set=skip_opt)
-                log.info('Memory optimizing: Done')
         log.info(
             'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
             % (repr(self.run_config), repr(self.params), repr(model_spec)))
@@ -274,6 +270,7 @@ class Estimator(object):
         mon_exe = MonitoredExecutor(
             train_executor,
             train_program,
+            loss=model_spec.loss,
             run_config=self.run_config,
             run_hooks=train_run_hooks, )
 
@@ -443,8 +440,13 @@ def train_and_eval(_shit=None,
             self.program, self.model_spec = est.build_for_eval(
                 list(eval_dataset.values())[
                     0])  #eval_datasets must have same output shapes
-            self.summary_writer = get_summary_writer(
-                os.path.join(run_config.model_dir, 'eval_history'))
+            self.summary_writers = {
+                ds_name: get_summary_writer(
+                    os.path.join(
+                        os.path.join(run_config.model_dir, 'eval_history'),
+                        ds_name))
+                for ds_name in eval_dataset
+            }
 
         def after_run(self, _, state):
             if state.step > run_config.skip_steps and state.gstep % run_config.eval_steps == 0:
@@ -455,7 +457,7 @@ def train_and_eval(_shit=None,
                                              est.run_config.eval_max_steps),
                         hooks.EvalHook(
                             self.model_spec.metrics,
-                            summary_writer=self.summary_writer, )
+                            summary_writer=self.summary_writers[name], )
                     ]
                     single_card_place = F.cuda_places()[0]
                     eval_executor = F.Executor(single_card_place)
@@ -469,10 +471,10 @@ def train_and_eval(_shit=None,
                             mon_exe.run(feed=data)
                     _, eval_res = mon_exe.result
                     eval_results[name] = eval_res
-                    log_eval_result(name, eval_res, self.summary_writer, state)
+                    log_eval_result(name, eval_res, self.summary_writers[name],
+                                    state)
                 for exporter in exporters:
-                    exporter.export(eval_executor,
-                                    self.program.startup_program,
+                    exporter.export(eval_executor, self.program,
                                     self.model_spec, eval_results, state)
             else:
                 eval_results = {}
