@@ -254,7 +254,7 @@ class EvalHook(RunHook):
             printable.append('{}\t{}'.format(n, val))
             if self.writer is not None:
                 self.writer.add_scalar(n, val, self.train_state.gstep)
-                log.debug('write to tensorboard %s' % self.writer.log_dir)
+                log.debug('write to tensorboard %s' % self.writer.logdir)
 
         if len(printable):
             log.info('*** eval res: %10s ***' % self._name)
