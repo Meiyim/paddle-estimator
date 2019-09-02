@@ -186,7 +186,7 @@ class MonitoredExecutor(object):
             state=None,
             run_config=None,  #none if not load
             run_hooks=[],
-            warm_start_from=None):
+            warm_start_setting=None):
         if not isinstance(executor, F.Executor):
             raise ValueError('PE is no longer supported')
         if isinstance(executor, F.ParallelExecutor):
@@ -196,7 +196,7 @@ class MonitoredExecutor(object):
         self._state = RunState()  # might be overwrite in freeze
         self._program = program
         self._loss = loss
-        self._warm_start_setting = warm_start_from
+        self._warm_start_setting = warm_start_setting
         self._saver = None  # will set in prepare
         self.result = None  # will set after train
         if run_config is not None:
@@ -214,6 +214,7 @@ class MonitoredExecutor(object):
     def init_or_restore_variables(self):
         # The order of this 2 steps really matters
         # 1. init train
+
         F.Executor(F.cuda_places()[0]).run(self._program.startup_program)
         # 2. restore param
         if self._warm_start_setting is not None:

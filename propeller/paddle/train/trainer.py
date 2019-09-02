@@ -272,7 +272,8 @@ class Estimator(object):
             train_program,
             loss=model_spec.loss,
             run_config=self.run_config,
-            run_hooks=train_run_hooks, )
+            run_hooks=train_run_hooks,
+            warm_start_setting=self.warm_start_setting)
 
         distribution.init_distribuition_env(
             train_program)  #only initialize distribute training with 
@@ -432,8 +433,11 @@ def train_and_eval(_shit=None,
                     'eval dataset has different output_shapes or types: %s' %
                     repr(ds_list))
 
-    est = Estimator(model_class_or_model_fn, run_config, params,
-                    warm_start_setting)
+    est = Estimator(
+        model_class_or_model_fn,
+        run_config,
+        params,
+        warm_start_setting=warm_start_setting)
 
     class EvalHookOnTrainLoop(hooks.RunHook):
         def __init__(self):
