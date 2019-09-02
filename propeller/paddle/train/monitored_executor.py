@@ -206,10 +206,6 @@ class MonitoredExecutor(object):
             fetch_list_len = map(len, fetch_list)
 
             fetch_list, schema = util.flatten(fetch_list)
-            #if len(set(fetch_list)) != len(fetch_list):
-            #    log.error('strange shit happend when fetch list has idetity tensors %s' % fetch_list)
-
-            #log.debug(fetch_list)
             if isinstance(self._exe, F.ParallelExecutor):
                 res = self._exe.run(fetch_list=fetch_list, *args, **kwargs)
             else:
