@@ -22,6 +22,7 @@ import time
 
 import numpy as np
 from propeller.service.client import InferenceClient
+from propeller.service.client import InferenceAsyncClient
 
 if __name__ == "__main__":
 
@@ -39,8 +40,9 @@ if __name__ == "__main__":
 
     #data_path = "/home/work/suweiyue/Release/infer_xnli/seq128_data/dev_ds"
     data_path = "/home/work/suweiyue/Share/model-compression/dev"
-    address = "tcp://localhost:5571"
-    client = InferenceClient(address)
+    address = "tcp://localhost:5575"
+    #client = InferenceClient(address)
+    client = InferenceAsyncClient(address, batch_size=50)
 
     data = []
     num = 10

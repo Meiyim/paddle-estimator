@@ -129,6 +129,7 @@ class InferenceProxy(object):
             log.info("Queue init done")
             zmq.device(zmq.QUEUE, frontend, backend)
         except Exception as e:
+            log.exception(e)
             log.info("Bringing down zmq device")
         finally:
             frontend.close()
