@@ -62,7 +62,7 @@ def log_eval_result(name, eval_result, swriter, state):
         printable.append('{}\t{}'.format(n, val))
         if swriter is not None:
             swriter.add_scalar(n, val, state.gstep)
-        log.debug('write to tensorboard %s' % swriter.log_dir)
+        log.debug('write to tensorboard %s' % swriter.logdir)
 
     if len(printable):
         log.info('*** eval res: %10s ***' % name)
