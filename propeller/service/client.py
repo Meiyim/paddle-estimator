@@ -27,7 +27,7 @@ import numpy as np
 import propeller.service.utils as serv_utils
 
 
-class InferenceClient(object):
+class InferenceBaseClient(object):
     def __init__(self, address):
         self.context = zmq.Context()
         self.address = address
@@ -50,7 +50,7 @@ class InferenceClient(object):
         return ret
 
 
-class InferenceAsyncClient(object):
+class InferenceClient(InferenceBaseClient):
     def __init__(self, address, batch_size=128, num_coroutine=10):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)

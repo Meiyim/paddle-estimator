@@ -64,7 +64,6 @@ def run_worker(model_dir, device_idx, endpoint="ipc://worker.ipc"):
     log.debug("run_worker %s" % device_idx)
     os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv(
         "CUDA_VISIBLE_DEVICES").split(",")[device_idx]
-    import traceback
     import paddle.fluid as F
     from propeller.service import interface_pb2
     import propeller.service.utils as serv_utils
@@ -78,7 +77,7 @@ def run_worker(model_dir, device_idx, endpoint="ipc://worker.ipc"):
         predictor = Predictor(model_dir, 0)
         log.debug("Predictor %s" % device_idx)
     except Exception as e:
-        log.warn(str(e))
+        log.exception(e)
 
     while True:
         #  Wait for next request from client
@@ -93,8 +92,7 @@ def run_worker(model_dir, device_idx, endpoint="ipc://worker.ipc"):
                 slots=[serv_utils.paddlearray_to_slot(r) for r in ret])
             socket.send(slots.SerializeToString())
         except Exception as e:
-            log.warm(str(e))
-            traceback.print_exc(file=sys.stdout)
+            log.exception(e)
 
 
 class InferencePredictor(object):
