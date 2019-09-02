@@ -95,7 +95,7 @@ class MSE(Mean):
         return self.mse,
 
 
-class Cos(Mean):
+class Cosine(Mean):
     def __init__(self, label, pred):
         self.cos = L.cos_sim(label, pred)
         self.reset()
