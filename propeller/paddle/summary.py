@@ -24,13 +24,13 @@ from propeller.paddle.collection import default_collection, Key
 
 def scalar(name, tensor):
     if not isinstance(tensor, F.framework.Variable):
-        raise ValueError('expect paddle Variable, got %s' % tensor)
+        raise ValueError('expect paddle Variable, got %s' % repr(tensor))
     tensor.persistable = True
     default_collection().add(Key.SUMMARY_SCALAR, (name, tensor))
 
 
 def histogram(name, tensor):
     if not isinstance(tensor, F.framework.Variable):
-        raise ValueError('expect paddle Variable, got %s' % tensor)
+        raise ValueError('expect paddle Variable, got %s' % repr(tensor))
     tensor.persistable = True
     default_collection().add(Key.SUMMARY_HISTOGRAM, (name, tensor))

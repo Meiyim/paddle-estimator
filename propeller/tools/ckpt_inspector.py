@@ -58,7 +58,6 @@ def parse(filename):
         data = f.read(pbsize)
         proto = framework_pb2.VarType.TensorDesc()
         proto.ParseFromString(data)
-
         log.info('type: [%s] dim %s' % (proto.data_type, proto.dims))
         if proto.data_type == framework_pb2.VarType.FP32:
             arr = np.array(
@@ -69,6 +68,9 @@ def parse(filename):
         elif proto.data_type == framework_pb2.VarType.INT32:
             arr = np.array(
                 gen_arr(f.read(), 'i'), dtype=np.int32).reshape(proto.dims)
+        elif proto.data_type == framework_pb2.VarType.INT8:
+            arr = np.array(
+                gen_arr(f.read(), 'B'), dtype=np.int8).reshape(proto.dims)
         else:
             raise RuntimeError('Unknown dtype %s' % proto.data_type)
 

@@ -45,16 +45,12 @@ class BestExporter(Exporter):
         self._best = None
         self.cmp_fn = cmp_fn
 
-    def export(self, exe, program_dict, eval_model_spec, eval_result, state):
+    def export(self, exe, program, eval_model_spec, eval_result, state):
         log.debug('New evaluate result: %s \nold: %s' %
                   (repr(eval_result), repr(self._best)))
-        if self._best is None:
-            self._best = eval_result
-            log.debug('[Best Exporter]: skip step %d' % state.gstep)
-            return
-        if self.cmp_fn(old=self._best, new=eval_result):
+        if self._best is None or self.cmp_fn(old=self._best, new=eval_result):
             log.debug('[Best Exporter]: export to %s' % self._export_dir)
-            eval_program = list(program_dict.values())[0]
+            eval_program = program.train_program
             # FIXME: all eval datasets has same name/types/shapes now!!! so every eval program are the smae
 
             saver = Saver(
@@ -74,14 +70,10 @@ class BestInferenceModelExporter(Exporter):
         self._best = None
         self.cmp_fn = cmp_fn
 
-    def export(self, exe, program_dict, eval_model_spec, eval_result, state):
+    def export(self, exe, program, eval_model_spec, eval_result, state):
         log.debug('New evaluate result: %s \nold: %s' %
                   (repr(eval_result), repr(self._best)))
-        if self._best is None:
-            self._best = eval_result
-            log.debug('[Best Exporter]: skip step %d' % state.gstep)
-            return
-        if self.cmp_fn(old=self._best, new=eval_result):
+        if self._best is None or self.cmp_fn(old=self._best, new=eval_result):
             log.debug('[Best Exporter]: export to %s' % self._export_dir)
             if eval_model_spec.inference_spec is None:
                 raise ValueError('model_fn didnt return InferenceSpec')
@@ -99,8 +91,7 @@ class BestInferenceModelExporter(Exporter):
                 feed_var = [i.name for i in inf_sepc.inputs]
                 fetch_var = inf_sepc.outputs
 
-                eval_program = list(program_dict.values())[0]
-                # FIXME: all eval datasets has same name/types/shapes now!!! so every eval program are the smae
+                eval_program = program.train_program
                 startup_prog = F.Program()
                 F.io.save_inference_model(
                     save_dir,
