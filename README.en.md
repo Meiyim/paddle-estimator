@@ -75,7 +75,7 @@ More detail see example/toy/
 ## Main Feature
 1. train_and_eval
 
-    according to user-specified `propeller.Model`class，initialize training model in the following 2 modes: 1. TRAIN mode 2. EVAL mode
+    according to user-specified `propeller.Model`class，initialize training model in the following 2 modes: 1. TRAIN mode 2. EVAL mode and
     perform train_and_eval
 
 2. FeatureColumns
