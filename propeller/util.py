@@ -32,12 +32,9 @@ log = logging.getLogger(__name__)
 
 def ArgumentParser(name):
     parser = argparse.ArgumentParser('propeller model')
-    #parser.add_argument('--param_dir', type=str)
     parser.add_argument('--run_config', type=str, default='')
     parser.add_argument(
         '--hparam', type=str, nargs='*', action='append', default=[['']])
-    #parser.add_argument('--train_dir', type=str)
-    parser.add_argument('--batch_size', type=int)
     return parser
 
 
