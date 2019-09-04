@@ -74,7 +74,7 @@ def log_eval_result(name, eval_result, swriter, state):
 def build_net(model_fn, features, mode, params, run_config):
     model_spec = model_fn(
         features=features, mode=mode, params=params, run_config=run_config)
-    if not isinstance(model_spec.predictions, list):
+    if not isinstance(model_spec.predictions, (list, tuple)):
         raise ValueError('model_spec.predictions shuold be list, got %s' %
                          repr(model_spec.predictions))
 
@@ -82,6 +82,9 @@ def build_net(model_fn, features, mode, params, run_config):
         if not isinstance(model_spec.loss, F.framework.Variable):
             raise ValueError('model_spec.metrics should be Variable, got %s' %
                              repr(model_spec.loss))
+        if not (model_spec.loss.shape == () or model_spec.loss.shape == (1, )):
+            raise ValueError('expect scarlar loss, got %s' %
+                             repr(model_spec.loss.shape))
         model_spec.loss.persistable = True
     elif mode == RunMode.EVAL:
         if not isinstance(model_spec.metrics, dict):
@@ -285,9 +288,13 @@ class Learner(object):
                     per_step=mon_exe._save_steps,
                     skip_step=mon_exe._skip_steps))
 
-        with mon_exe:
-            for data in train_ds.start():
-                mon_exe.run(feed=data)
+        try:
+            with mon_exe:
+                for data in train_ds.start():
+                    mon_exe.run(feed=data)
+        except (StopException, F.core.EOFException) as e:
+            pass
+
         return mon_exe.result
 
     def evaluate(self, eval_dataset, eval_hooks=[]):
@@ -311,9 +318,12 @@ class Learner(object):
             run_hooks=eval_hooks)
         mon_exe.init_or_restore_variables()
 
-        with mon_exe:
-            for data in eval_dataset.start(places=[single_card_place]):
-                mon_exe.run(feed=data)
+        try:
+            with mon_exe:
+                for data in eval_dataset.start(places=[single_card_place]):
+                    mon_exe.run(feed=data)
+        except (StopException, F.core.EOFException) as e:
+            pass
 
         _, eval_result = mon_exe.result
 
@@ -352,21 +362,25 @@ class Learner(object):
             program,
             run_config=pred_run_config, )
         mon_exe.init_or_restore_variables()
-        with mon_exe:
-            mon_exe._state = mon_exe._saver.restore(ckpt)
-            for data in predict_dataset.start(places=[single_card_place]):
-                mon_exe.run(feed=data)
-            log.info('Runining predict from dir: %s' % repr(mon_exe.state))
-            single_card_place = F.cuda_places()[0]
-            for data in predict_dataset.start(places=[single_card_place]):
-                res = mon_exe.run(fetch_list=model_spec.predictions, feed=data)
-                if split_batch:
-                    res = map(lambda i: i.tolist(), res)
-                    res = zip(*res)  # transpose
-                    for r in res:
-                        yield r
-                else:
-                    yield res
+        try:
+            with mon_exe:
+                mon_exe._state = mon_exe._saver.restore(ckpt)
+                for data in predict_dataset.start(places=[single_card_place]):
+                    mon_exe.run(feed=data)
+                log.info('Runining predict from dir: %s' % repr(mon_exe.state))
+                single_card_place = F.cuda_places()[0]
+                for data in predict_dataset.start(places=[single_card_place]):
+                    res = mon_exe.run(fetch_list=model_spec.predictions,
+                                      feed=data)
+                    if split_batch:
+                        res = map(lambda i: i.tolist(), res)
+                        res = zip(*res)  # transpose
+                        for r in res:
+                            yield r
+                    else:
+                        yield res
+        except (StopException, F.core.EOFException) as e:
+            pass
 
 
 def train_and_eval(_shit=None,
@@ -475,9 +489,12 @@ def train_and_eval(_shit=None,
                         self.program,
                         run_config=est.run_config,
                         run_hooks=eval_hooks)
-                    with mon_exe:
-                        for data in ds.start(places=[single_card_place]):
-                            mon_exe.run(feed=data)
+                    try:
+                        with mon_exe:
+                            for data in ds.start(places=[single_card_place]):
+                                mon_exe.run(feed=data)
+                    except (StopException, F.core.EOFException) as e:
+                        pass
                     _, eval_res = mon_exe.result
                     eval_results[name] = eval_res
                     log_eval_result(name, eval_res, self.summary_writers[name],

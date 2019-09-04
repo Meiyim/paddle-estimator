@@ -24,6 +24,7 @@ import zmq
 import zmq.asyncio
 import numpy as np
 
+from propeller import log
 import propeller.service.utils as serv_utils
 
 
@@ -34,7 +35,7 @@ class InferenceBaseClient(object):
         self.lock = threading.Lock()
         self.socket = self.context.socket(zmq.REQ)
         self.socket.connect(address)
-        print("Connecting to server...")
+        log.info("Connecting to server... %s" % address)
 
     def __call__(self, *args):
         for arg in args:
@@ -59,7 +60,7 @@ class InferenceClient(InferenceBaseClient):
             context.socket(zmq.REQ) for _ in range(num_coroutine)
         ]
         self.locks = [threading.Lock() for _ in range(num_coroutine)]
-        print("Connecting to server...")
+        log.info("Connecting to server... %s" % address)
         for socket in self.socket_pool:
             socket.connect(address)
         self.num_coroutine = num_coroutine
