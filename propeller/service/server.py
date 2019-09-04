@@ -114,24 +114,30 @@ class InferencePredictor(object):
 
 
 class InferenceProxy(object):
+    def __init__(self):
+        self.backend = None
+        self.frontend = None
+
     def listen(self, frontend_addr, backend_addr):
         log.info("InferenceProxy starting...")
         try:
             context = zmq.Context(1)
             # Socket facing clients
-            frontend = context.socket(zmq.ROUTER)
-            frontend.bind(frontend_addr)
+            self.frontend = context.socket(zmq.ROUTER)
+            self.frontend.bind(frontend_addr)
             # Socket facing services
-            backend = context.socket(zmq.DEALER)
-            backend.bind(backend_addr)
+            self.backend = context.socket(zmq.DEALER)
+            self.backend.bind(backend_addr)
             log.info("Queue init done")
-            zmq.device(zmq.QUEUE, frontend, backend)
+            zmq.device(zmq.QUEUE, self.frontend, self.backend)
         except Exception as e:
             log.exception(e)
             log.info("Bringing down zmq device")
         finally:
-            frontend.close()
-            backend.close()
+            if self.frontend is not None:
+                self.frontend.close()
+            if self.backend is not None:
+                self.backend.close()
             context.term()
 
 
@@ -143,6 +149,8 @@ class InferenceServer(object):
     def listen(self, port):
         frontend_addr = "tcp://*:%s" % port
         backend_addr = "ipc://backend.ipc"
-        InferencePredictor(backend_addr, self.model_dir,
-                           self.n_devices).start()
-        InferenceProxy().listen(frontend_addr, backend_addr)
+        predictor = InferencePredictor(backend_addr, self.model_dir,
+                                       self.n_devices).start()
+        proxy = InferenceProxy()
+        proxy.listen(frontend_addr, backend_addr)
+        predictor.join()
