@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 
 __all__ = [
     'Metrics', 'F1', 'Recall', 'Precision', 'Mrr', 'Mean', 'Acc', 'ChunkF1',
-    'Pn'
+    'RecallAtPrecision'
 ]
 
 
@@ -184,6 +184,21 @@ class Auc(Metrics):
             self.label_saver.astype(np.int64), self.pred_saver)
         auc = sklearn.metrics.auc(fpr, tpr)
         return auc
+
+
+class RecallAtPrecision(Auc):
+    def __init__(self, label, pred, precision=0.9):
+        super(RecallAtPrecision, self).__init__(label, pred)
+        self.precision = precision
+
+    def eval(self):
+        self.pred_saver = self.pred_saver.reshape(
+            [self.label_saver.size, -1])[:, -1]
+        precision, recall, thresholds = sklearn.metrics.precision_recall_curve(
+            self.label_saver, self.pred_saver)
+        for p, r in zip(precision, recall):
+            if p > self.precision:
+                return r
 
 
 class PrecisionAtThreshold(Auc):
