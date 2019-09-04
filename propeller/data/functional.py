@@ -165,6 +165,9 @@ def buffered_func(dataset, size):
 
 
 def padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
+    if not isinstance(batch_size, int):
+        raise ValueError('unknown batch_size: %s' % repr(batch_size))
+
     def gen():
         iterable = dataset()
         pad_value_t = pad_value
