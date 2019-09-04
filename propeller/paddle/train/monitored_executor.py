@@ -331,8 +331,8 @@ class MonitoredExecutor(object):
         return ret
 
     def __exit__(self, err_type, err_value, trace):
-        if (err_type is None) or (err_type is F.core.EOFException) or (
-                err_type is StopException) or (err_type is KeyboardInterrupt):
+        if (err_type is None) or isinstance(err_value, (
+                F.core.EOFException, StopException, KeyboardInterrupt)):
             try:
                 log.info('********** Stop Loop ************')
                 self.result = []
@@ -340,7 +340,6 @@ class MonitoredExecutor(object):
                     self.result.append(h.after_train())
             except Exception as e:
                 log.exception('error occur after loop %s' % repr(e))
-                raise e
         else:
             log.info('********** Interupt Loop ************')
             log.exception('error occur during loop %s: %s' %
