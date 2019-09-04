@@ -74,7 +74,7 @@ def log_eval_result(name, eval_result, swriter, state):
 def build_net(model_fn, features, mode, params, run_config):
     model_spec = model_fn(
         features=features, mode=mode, params=params, run_config=run_config)
-    if not isinstance(model_spec.predictions, list):
+    if not isinstance(model_spec.predictions, (list, tuple)):
         raise ValueError('model_spec.predictions shuold be list, got %s' %
                          repr(model_spec.predictions))
 
@@ -82,6 +82,9 @@ def build_net(model_fn, features, mode, params, run_config):
         if not isinstance(model_spec.loss, F.framework.Variable):
             raise ValueError('model_spec.metrics should be Variable, got %s' %
                              repr(model_spec.loss))
+        if not (model_spec.loss.shape == () or model_spec.loss.shape == (1, )):
+            raise ValueError('expect scarlar loss, got %s' %
+                             repr(model_spec.loss.shape))
         model_spec.loss.persistable = True
     elif mode == RunMode.EVAL:
         if not isinstance(model_spec.metrics, dict):
