@@ -21,14 +21,15 @@ import os
 import itertools
 import random
 import inspect
-import numpy as np
+import multiprocessing
 from contextlib import contextmanager
-
 import gzip
 import struct
 import functools
+
 import six
 from six.moves import zip, map, filter
+import numpy as np
 
 from propeller.util import map_structure
 
@@ -160,8 +161,46 @@ def take_func(dataset, count):
 
 
 def buffered_func(dataset, size):
-    import paddle
-    return paddle.reader.buffered(dataset, size)
+    """
+    Creates a buffered data reader.
+
+    The buffered data reader will read and save data entries into a
+    buffer. Reading from the buffered data reader will proceed as long
+    as the buffer is not empty.
+
+    :param reader: the data reader to read from.
+    :type reader: callable
+    :param size: max buffer size.
+    :type size: int
+
+    :returns: the buffered data reader.
+    """
+
+    class EndSignal():
+        pass
+
+    end = EndSignal()
+
+    def read_worker(r, q):
+        for d in r:
+            q.put(d)
+        q.put(end)
+
+    def data_reader():
+        r = dataset()
+        q = multiprocessing.Queue(maxsize=size)
+        t = multiprocessing.Process(
+            target=read_worker, args=(
+                r,
+                q, ))
+        t.daemon = True
+        t.start()
+        e = q.get()
+        while e != end:
+            yield e
+            e = q.get()
+
+    return data_reader
 
 
 def padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
