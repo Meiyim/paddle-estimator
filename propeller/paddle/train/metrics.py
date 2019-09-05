@@ -120,7 +120,7 @@ class Precision(Metrics):
     def tensor(self):
         self.label.persistable = True
         self.pred.persistable = True
-        return self.label.name, self.pred.name
+        return self.label, self.pred
 
     def update(self, args):
         label, pred = args

@@ -224,8 +224,8 @@ class EvalHook(RunHook):
             for ii in i:
                 if not isinstance(ii, F.framework.Variable):
                     raise ValueError(
-                        'metrics tensor be propeller.train.Metrics, got %s' %
-                        repr(ii))
+                        'metrics tensor be propeller.train.Metrics, got %s of type %s'
+                        % (repr(ii), type(ii)))
         ls_flt, self.schema = util.flatten(ls)
         #log.debug(ls_flt)
         return ls_flt
