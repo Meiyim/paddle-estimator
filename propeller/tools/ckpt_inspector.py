@@ -24,6 +24,7 @@ import argparse
 import numpy as np
 import collections
 from distutils import dir_util
+import pickle
 
 #from utils import print_arguments 
 import paddle.fluid as F
@@ -88,7 +89,7 @@ def dump(arr, path):
         os.makedirs(os.path.dirname(path))
     except FileExistsError:
         pass
-    arr.dump(open(path, 'wb'))
+    pickle.dump(arr, open(path, 'wb'), protocol=4)
 
 
 def list_dir(dir_or_file):
