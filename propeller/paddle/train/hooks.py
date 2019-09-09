@@ -30,8 +30,8 @@ from propeller.paddle.train import distribution
 from propeller.paddle.train.metrics import Metrics
 
 __all__ = [
-    'RunHook', 'TqdmProgressBarHook', 'CheckpointSaverHook', 'LoggingHook',
-    'StopAtStepHook', 'EvalHook'
+    'RunHook', 'TqdmProgressBarHook', 'TqdmNotebookProgressBarHook',
+    'CheckpointSaverHook', 'LoggingHook', 'StopAtStepHook', 'EvalHook'
 ]
 
 log = logging.getLogger(__name__)
@@ -83,6 +83,40 @@ class TqdmProgressBarHook(RunHook):
 
     def before_run(self, state):
         self.tqdm.n = state.gstep
+        return []
+
+    def __del__(self):
+        if self.tqdm:
+            self.tqdm.close()
+
+
+class TqdmNotebookProgressBarHook(RunHook):
+    def __init__(self, max_steps, desc=None):
+        self.tqdm = None
+        import tqdm
+        from propeller import log as main_log
+        hdl = main_log.handlers[0]
+
+        class TqdmLogginHandler(logging.Handler):
+            def emit(self, record):
+                try:
+                    msg = self.format(record)
+                    tqdm.tqdm.write(msg, file=sys.stderr)
+                    self.flush()
+                except (KeyboardInterrupt, SystemExit):
+                    raise
+                except:
+                    self.handleError(record)
+
+        tqdm_hdl = TqdmLogginHandler()
+        tqdm_hdl.setFormatter(hdl.formatter)
+        main_log.removeHandler(hdl)
+        main_log.addHandler(tqdm_hdl)
+        self.tqdm = tqdm.tqdm_notebook(total=max_steps, desc=None)
+
+    def before_run(self, state):
+        self.tqdm.n = state.gstep
+        self.tqdm.refresh()
         return []
 
     def __del__(self):
