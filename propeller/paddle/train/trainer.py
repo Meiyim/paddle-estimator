@@ -475,7 +475,7 @@ def train_and_eval(_shit=None,
             if state.step > run_config.skip_steps and state.gstep % run_config.eval_steps == 0:
                 eval_results = {}
                 for name, ds in six.iteritems(eval_dataset):
-                    eval_hooks = [
+                    ehooks = [
                         hooks.StopAtStepHook(est.run_config.eval_max_steps,
                                              est.run_config.eval_max_steps),
                         hooks.EvalHook(
@@ -488,14 +488,16 @@ def train_and_eval(_shit=None,
                         eval_executor,
                         self.program,
                         run_config=est.run_config,
-                        run_hooks=eval_hooks)
+                        run_hooks=ehooks + eval_hooks)
                     try:
                         with mon_exe:
                             for data in ds.start(places=[single_card_place]):
                                 mon_exe.run(feed=data)
                     except (StopException, F.core.EOFException) as e:
                         pass
-                    _, eval_res = mon_exe.result
+                    hook_results = mon_exe.result
+                    eval_res = hook_results[
+                        1]  # hook_results:  [StopAtStepHook, EvalHook, ...]
                     eval_results[name] = eval_res
                     log_eval_result(name, eval_res, self.summary_writers[name],
                                     state)
@@ -506,5 +508,6 @@ def train_and_eval(_shit=None,
                 eval_results = {}
             return eval_results
 
-    res = est.train(train_dataset, train_hooks=[EvalHookOnTrainLoop()])
-    return
+    res = est.train(
+        train_dataset, train_hooks=[EvalHookOnTrainLoop()] + train_hooks)
+    return res
