@@ -61,18 +61,18 @@ class Predictor(object):
 
 
 def run_worker(model_dir, device_idx, endpoint="ipc://worker.ipc"):
-    log.debug("run_worker %s" % device_idx)
-    os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv(
-        "CUDA_VISIBLE_DEVICES").split(",")[device_idx]
-    import paddle.fluid as F
-    from propeller.service import interface_pb2
-    import propeller.service.utils as serv_utils
-    log.debug("import %s" % device_idx)
-    context = zmq.Context()
-    socket = context.socket(zmq.REP)
-    socket.connect(endpoint)
-    #socket.bind(endpoint)
     try:
+        log.debug("run_worker %s" % device_idx)
+        os.environ["CUDA_VISIBLE_DEVICES"] = os.getenv(
+            "CUDA_VISIBLE_DEVICES").split(",")[device_idx]
+        log.debug('cuda_env %s' % os.environ["CUDA_VISIBLE_DEVICES"])
+        import paddle.fluid as F
+        from propeller.service import interface_pb2
+        import propeller.service.utils as serv_utils
+        context = zmq.Context()
+        socket = context.socket(zmq.REP)
+        socket.connect(endpoint)
+        #socket.bind(endpoint)
         log.debug("Predictor building %s" % device_idx)
         predictor = Predictor(model_dir, 0)
         log.debug("Predictor %s" % device_idx)
@@ -93,6 +93,7 @@ def run_worker(model_dir, device_idx, endpoint="ipc://worker.ipc"):
             socket.send(slots.SerializeToString())
         except Exception as e:
             log.exception(e)
+            socket.send(e.message)
 
 
 class InferencePredictor(object):

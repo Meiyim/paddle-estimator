@@ -19,18 +19,20 @@ from __future__ import unicode_literals
 import sys
 import os
 import argparse
-
 import logging
 import logging.handlers
 from propeller.service.server import InferenceServer
+from propeller import log
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-m', '--model_dir', type=str, required=True)
     parser.add_argument('-p', '--port', type=int, required=True)
+    parser.add_argument('-v', '--verbose', action='store_true')
     args = parser.parse_args()
 
-    from propeller import log
+    if args.verbose:
+        log.setLevel(logging.DEBUG)
     n_devices = len(os.getenv("CUDA_VISIBLE_DEVICES").split(","))
     server = InferenceServer(args.model_dir, n_devices)
     log.info('propeller server listent on port %d' % args.port)
