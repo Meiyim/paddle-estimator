@@ -119,7 +119,7 @@ class Saver(object):
             shutil.rmtree(tmp_dir)
         except OSError:
             pass
-        log.info('saving step %d to %s' % (state.gstep, save_dir))
+        log.debug('saving step %d to %s' % (state.gstep, save_dir))
         F.io.save_persistables(self._exe, tmp_dir, self._program)
         shutil.move(tmp_dir, save_dir)
         meta = state.serialize()
@@ -134,8 +134,8 @@ class Saver(object):
                 ckpt_dir = os.path.join(self._save_dir, ckpt)
                 if os.path.exists(ckpt_dir):
                     shutil.rmtree(ckpt_dir)
-                    log.info('No. of ckpt exceed %d, clean up: %s' %
-                             (self._max_ckpt_to_keep, ckpt_dir))
+                    log.debug('No. of ckpt exceed %d, clean up: %s' %
+                              (self._max_ckpt_to_keep, ckpt_dir))
         open(self.ckpt_info_path, 'w').write('\n'.join(self.ckpt_list))
 
     def restore(self, ckpt=-1):
