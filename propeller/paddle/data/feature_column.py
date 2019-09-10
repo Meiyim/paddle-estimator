@@ -193,10 +193,10 @@ class FeatureColumns(object):
     def _make_gz_dataset(self, raw_dir, gz_dir):
         assert raw_dir or gz_dir, 'data_dir not specified when using gz mode'
         if raw_dir is not None:
-            assert os.path.exists(raw_dir)
+            assert os.path.exists(raw_dir), 'raw_dir not exists: %s' % raw_dir
             raw_file = os.listdir(raw_dir)
         if gz_dir is None:
-            gz_dir = '%s_gz' % raw_dir.strip('/')
+            gz_dir = '%s_gz' % raw_dir.rstrip('/')
 
         if not os.path.exists(gz_dir):
             os.mkdir(gz_dir)
