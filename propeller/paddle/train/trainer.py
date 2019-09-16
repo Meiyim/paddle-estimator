@@ -74,9 +74,6 @@ def log_eval_result(name, eval_result, swriter, state):
 def build_net(model_fn, features, mode, params, run_config):
     model_spec = model_fn(
         features=features, mode=mode, params=params, run_config=run_config)
-    if not isinstance(model_spec.predictions, (list, tuple)):
-        raise ValueError('model_spec.predictions shuold be list, got %s' %
-                         repr(model_spec.predictions))
 
     if mode == RunMode.TRAIN:
         if not isinstance(model_spec.loss, F.framework.Variable):
@@ -91,7 +88,9 @@ def build_net(model_fn, features, mode, params, run_config):
             raise ValueError('model_spec.metrics should be dict, got %s' %
                              repr(model_spec.metrics))
     elif mode == RunMode.PREDICT:
-        assert model_spec.predictions is not None
+        if not isinstance(model_spec.predictions, (list, tuple)):
+            raise ValueError('model_spec.predictions shuold be list, got %s' %
+                             repr(model_spec.predictions))
     else:
         raise ValueError('unkonw mode %s' % mode)
     return model_spec
@@ -364,9 +363,6 @@ class Learner(object):
         mon_exe.init_or_restore_variables()
         try:
             with mon_exe:
-                mon_exe._state = mon_exe._saver.restore(ckpt)
-                for data in predict_dataset.start(places=[single_card_place]):
-                    mon_exe.run(feed=data)
                 log.info('Runining predict from dir: %s' % repr(mon_exe.state))
                 single_card_place = F.cuda_places()[0]
                 for data in predict_dataset.start(places=[single_card_place]):
@@ -378,7 +374,7 @@ class Learner(object):
                         for r in res:
                             yield r
                     else:
-                        yield res
+                        yield list(map(lambda i: i.tolist(), res))
         except (StopException, F.core.EOFException) as e:
             pass
 
