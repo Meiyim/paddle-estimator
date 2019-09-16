@@ -509,7 +509,8 @@ class PrecisionAtK(Metrics):
         total = 0
         for v in self.saver.values():
             v = sorted(v, key=lambda x: x[1], reverse=True)
-            for i in range(self.k):
+            k = min(self.k, len(v))
+            for i in range(k):
                 if v[i][0] == 1:
                     right += 1
                     break
