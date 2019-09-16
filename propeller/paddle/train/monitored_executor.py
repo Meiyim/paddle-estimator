@@ -326,7 +326,6 @@ class MonitoredExecutor(object):
                                 fetch_list=fetch_list,
                                 *args,
                                 **kwargs)
-
         self._state = self._state.next()
         return ret
 
