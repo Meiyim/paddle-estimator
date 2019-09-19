@@ -62,7 +62,7 @@ def log_eval_result(name, eval_result, swriter, state):
         printable.append('{}\t{}'.format(n, val))
         if swriter is not None:
             swriter.add_scalar(n, val, state.gstep)
-        log.debug('write to tensorboard %s' % swriter.logdir)
+            log.debug('write to tensorboard %s' % swriter.logdir)
 
     if len(printable):
         log.info('*** eval res: %10s ***' % name)
@@ -504,6 +504,7 @@ def train_and_eval(_shit=None,
                 eval_results = {}
             return eval_results
 
-    res = est.train(
-        train_dataset, train_hooks=[EvalHookOnTrainLoop()] + train_hooks)
+    if distribution.status.is_master:
+        train_hooks.append(EvalHookOnTrainLoop())
+    res = est.train(train_dataset, train_hooks=train_hooks)
     return res
