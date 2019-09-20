@@ -248,7 +248,7 @@ class Dataset(object):
                     raise e
 
         ret = cls()
-        ret.generator = gen
+        ret.generator = wrapper
         ret.data_shapes = data_shapes
         ret.data_types = data_types
         return ret

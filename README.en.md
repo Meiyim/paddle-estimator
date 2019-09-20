@@ -1,3 +1,4 @@
+[简体中文](./README.md)|English
 # Introducing Propeller
 This doc introduct Propeller, a high level paddle API for general ML, Propeller encapsulate the following actions:：
 -  training
