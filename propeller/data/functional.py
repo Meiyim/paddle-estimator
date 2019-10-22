@@ -238,8 +238,17 @@ class Dataset(object):
     def from_generator_func(cls, gen, data_shapes=None, data_types=None):
         if not inspect.isgeneratorfunction(gen):
             raise ValueError('expect generator function, got %s' % repr(gen))
+
+        def wrapper():  #compat to py3.7
+            try:
+                for item in gen():
+                    yield item
+            except RuntimeError as e:
+                if str(e) != 'generator raised StopIteration':
+                    raise e
+
         ret = cls()
-        ret.generator = gen
+        ret.generator = wrapper
         ret.data_shapes = data_shapes
         ret.data_types = data_types
         return ret

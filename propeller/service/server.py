@@ -101,17 +101,25 @@ class InferencePredictor(object):
         self.backend_addr = backend_addr
         self.model_dir = model_dir
         self.n_devices = n_devices
-        self.pool = multiprocessing.Pool(n_devices)
+        self.children = []
 
     def start(self):
         for device_idx in range(self.n_devices):
-            ret = self.pool.apply_async(run_worker, (
-                self.model_dir, device_idx, self.backend_addr))
+            p = multiprocessing.Process(
+                target=run_worker,
+                args=(self.model_dir, device_idx, self.backend_addr))
+            p.start()
+            self.children.append(p)
         return self
 
     def join(self):
-        self.pool.close()
-        self.pool.join()
+        for p in self.children:
+            p.join()
+
+    def term(self):
+        for p in self.children:
+            log.debug("terminating children %s" % repr(p))
+            p.terminate()
 
 
 class InferenceProxy(object):
@@ -135,6 +143,7 @@ class InferenceProxy(object):
             log.exception(e)
             log.info("Bringing down zmq device")
         finally:
+            log.debug('terminating proxy')
             if self.frontend is not None:
                 self.frontend.close()
             if self.backend is not None:
@@ -152,6 +161,10 @@ class InferenceServer(object):
         backend_addr = "ipc://backend.ipc"
         predictor = InferencePredictor(backend_addr, self.model_dir,
                                        self.n_devices).start()
-        proxy = InferenceProxy()
-        proxy.listen(frontend_addr, backend_addr)
-        predictor.join()
+        try:
+            proxy = InferenceProxy()
+            proxy.listen(frontend_addr, backend_addr)
+            predictor.join()
+        except KeyboardInterrupt:
+            log.debug('terminating  server')
+            predictor.term()

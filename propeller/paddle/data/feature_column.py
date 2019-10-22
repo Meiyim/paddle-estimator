@@ -295,8 +295,12 @@ class FeatureColumns(object):
         log.info('reading raw files stdin')
 
         def gen():
+            if six.PY3:
+                source = sys.stdin.buffer
+            else:
+                source = sys.stdin
             while True:
-                line = sys.stdin.buffer.readline()
+                line = source.readline()
                 if len(line) == 0:
                     break
                 yield line,
