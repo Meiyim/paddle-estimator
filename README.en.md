@@ -21,7 +21,7 @@ Propeller provide the following benefits:
 ## install
 
 ```script
-cd propeller && pip install .
+pip install --user .
 ```
 
 ## Getting Started
@@ -91,9 +91,9 @@ More detail see example/toy/
 
 4. Summary
     To trace tensor histogram in training, simply：
-    ```python
-        propeller.summary.histogram('loss', tensor) 
-    ```
+```python
+    propeller.summary.histogram('loss', tensor) 
+```
 
 
 ## Contributing
