@@ -135,7 +135,7 @@ class Precision(Metrics):
 
     def eval(self):
         tp = (self.label_saver & self.pred_saver).astype(np.int64).sum()
-        t = self.pred_saver.astype(np.int64).sum()
+        t = self.label_saver.astype(np.int64).sum()
         return tp / t
 
 
@@ -149,8 +149,8 @@ class Recall(Precision):
 class F1(Precision):
     def eval(self):
         tp = (self.label_saver & self.pred_saver).astype(np.int64).sum()
-        p = self.label_saver.astype(np.int64).sum()
-        t = self.pred_saver.astype(np.int64).sum()
+        t = self.label_saver.astype(np.int64).sum()
+        p = self.pred_saver.astype(np.int64).sum()
         precision = tp / (t + 1.e-6)
         recall = tp / (p + 1.e-6)
         return 2 * precision * recall / (precision + recall + 1.e-6)
@@ -256,8 +256,10 @@ class Mrr(Metrics):
                     sorted(
                         tup, key=lambda t: t[2], reverse=True)) if l != 0
             ]
-            ranks = ranks[0]
-            return ranks
+            if len(ranks):
+                return ranks[0]
+            else:
+                return 0.
 
         mrr_for_qid = [
             calc_func(tup)
