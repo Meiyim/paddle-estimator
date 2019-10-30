@@ -41,7 +41,7 @@ class RunHook(object):
     def __init__(self):
         pass
 
-    def before_train(self):
+    def before_train(self, program):
         pass
 
     def before_run(self, state):
@@ -141,7 +141,7 @@ class LoggingHook(RunHook):
         self.writer = summary_writer
         self.last_state = None
 
-    def before_train(self):
+    def before_train(self, program):
         if self.summary_record:
             if self.summary_record.scalar:
                 self.s_name, self.s_tolog = zip(*self.summary_record.scalar)
@@ -244,7 +244,7 @@ class EvalHook(RunHook):
         else:
             self.names, self.metrics = [], []
 
-    def before_train(self):
+    def before_train(self, program):
         for m in self.metrics:
             m.reset()
 
