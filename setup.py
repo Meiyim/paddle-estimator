@@ -32,7 +32,7 @@ setup(
     name='propeller',
     version='0.1',
     description='high level paddle-paddle API',
-    url='https://github.com/Meiyim/paddle-estimator',
+    url='https://github.com/PaddlePaddle/ERNIE',
     author='Chen Xuyi',
     author_email='chen_xuyi@outlook.com',
     license='Apache 2.0',
