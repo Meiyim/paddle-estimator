@@ -18,11 +18,6 @@ Propeller provide the following benefits:
     -   create checkpoint files and recover from failures
     -   save visualizable results
 
-## install
-
-```script
-pip install --user .
-```
 
 ## Getting Started
 ```python

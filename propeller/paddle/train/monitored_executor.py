@@ -287,7 +287,7 @@ class MonitoredExecutor(object):
         self.result = None
         for h in self._hooks:
             log.debug('train loop has hook %s' % h)
-            h.before_train()
+            h.before_train(self._program)
         return self
 
     def run(self, fetch_list=[], *args, **kwargs):
