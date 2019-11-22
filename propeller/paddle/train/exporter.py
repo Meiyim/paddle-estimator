@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+exporters
+"""
 from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
@@ -33,19 +36,26 @@ log = logging.getLogger(__name__)
 
 
 @six.add_metaclass(abc.ABCMeta)
-class Exporter():
+class Exporter(object):
+    """base exporter"""
+
     @abc.abstractmethod
     def export(self, exe, program, eval_result, state):
+        """export"""
         raise NotImplementedError()
 
 
 class BestExporter(Exporter):
+    """export saved model accordingto `cmp_fn`"""
+
     def __init__(self, export_dir, cmp_fn):
+        """doc"""
         self._export_dir = export_dir
         self._best = None
         self.cmp_fn = cmp_fn
 
     def export(self, exe, program, eval_model_spec, eval_result, state):
+        """doc"""
         log.debug('New evaluate result: %s \nold: %s' %
                   (repr(eval_result), repr(self._best)))
         if self._best is None or self.cmp_fn(old=self._best, new=eval_result):
@@ -65,12 +75,16 @@ class BestExporter(Exporter):
 
 
 class BestInferenceModelExporter(Exporter):
+    """export inference model accordingto `cmp_fn`"""
+
     def __init__(self, export_dir, cmp_fn):
+        """doc"""
         self._export_dir = export_dir
         self._best = None
         self.cmp_fn = cmp_fn
 
     def export(self, exe, program, eval_model_spec, eval_result, state):
+        """doc"""
         log.debug('New evaluate result: %s \nold: %s' %
                   (repr(eval_result), repr(self._best)))
         if self._best is None or self.cmp_fn(old=self._best, new=eval_result):

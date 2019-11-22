@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+doc
+"""
+
 from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
@@ -38,8 +42,11 @@ __all__ = ['MonitoredExecutor', 'Saver']
 
 
 class RunState(object):
+    """serializable Run state object"""
+
     @classmethod
     def from_str(cls, s):
+        """doc"""
         j = json.loads(s)
         ret = RunState()
         ret._gstep = j['global_step']
@@ -48,29 +55,36 @@ class RunState(object):
         return ret
 
     def __init__(self):
+        """doc"""
         self._gstep = 0
         self._step = 0
         self._time = time()
 
     @property
     def gstep(self):
+        """doc"""
         return self._gstep
 
     @property
     def step(self):
+        """doc"""
         return self._step
 
     @property
     def time(self):
+        """doc"""
         return self._time
 
     def __repr__(self):
+        """doc"""
         return repr({'global_step': self._gstep, 'time': self._time})
 
     def serialize(self):
+        """doc"""
         return json.dumps({'global_step': self._gstep, 'time': self._time})
 
     def next(self):
+        """doc"""
         ret = RunState()
         ret._gstep = self._gstep + 1
         ret._step = self._step + 1
@@ -79,12 +93,15 @@ class RunState(object):
 
 
 class Saver(object):
+    """checkpoint saver and manager"""
+
     def __init__(self,
                  save_dir,
                  exe,
                  program,
                  save_prefix='model',
                  max_ckpt_to_keep=None):
+        """doc"""
         if exe is not None:
             assert isinstance(
                 exe, F.Executor
@@ -108,9 +125,11 @@ class Saver(object):
 
     @property
     def last_ckpt(self):
+        """doc"""
         return self.ckpt_list[-1] if len(self.ckpt_list) else None
 
     def save(self, state):
+        """doc"""
         save_name = '%s_%d' % (self._save_prefix, state.gstep)
         save_dir = os.path.join(self._save_dir, save_name)
         tmp_dir = os.path.join(self._save_dir, 'tmp')
@@ -139,6 +158,7 @@ class Saver(object):
         open(self.ckpt_info_path, 'w').write('\n'.join(self.ckpt_list))
 
     def restore(self, ckpt=-1):
+        """doc"""
         if not isinstance(ckpt, (int, ) + six.string_types):
             raise ValueError('ckpt type not understood %s' % repr(ckpt))
         if isinstance(ckpt, int):
@@ -160,7 +180,7 @@ class Saver(object):
         state = RunState.from_str(open(meta_file).read())
         log.info('restore from ckpt %s, ckpt-status: %s' % (path, repr(state)))
 
-        def fn(v):
+        def _fn(v):
             vpath = os.path.join(path, v.name)
             if F.io.is_persistable(v):
                 if os.path.exists(vpath):
@@ -171,12 +191,12 @@ class Saver(object):
             return False
 
         F.io.load_vars(
-            self._exe, path, main_program=self._program, predicate=fn)
+            self._exe, path, main_program=self._program, predicate=_fn)
         return state
 
 
 class MonitoredExecutor(object):
-    """A wrapper handling the train loop"""
+    """An Executor wrapper handling the train loop"""
 
     def __init__(
             self,
@@ -209,9 +229,14 @@ class MonitoredExecutor(object):
 
     @property
     def state(self):
+        """doc"""
         return self._state
 
     def init_or_restore_variables(self):
+        """
+        init vars or restore vars from model_dir
+        call before train
+        """
         # The order of this 2 steps really matters
         # 1. init train
 
@@ -224,7 +249,7 @@ class MonitoredExecutor(object):
             log.info("warm start from %s" % self._warm_start_setting.from_dir)
             if self._warm_start_setting.predicate_fn is not None:
 
-                def fn(v):
+                def _fn(v):
                     ret = self._warm_start_setting.predicate_fn(v)
                     if ret:
                         log.info('warm start: %s' % v.name)
@@ -234,7 +259,7 @@ class MonitoredExecutor(object):
                     F.Executor(F.cuda_places()[0]),
                     self._warm_start_setting.from_dir,
                     main_program=self._program.train_program,
-                    predicate=fn)
+                    predicate=_fn)
             else:
                 raise NotImplementedError()
 
@@ -246,7 +271,12 @@ class MonitoredExecutor(object):
         if self._saver.last_ckpt is not None:
             self._state = self._saver.restore()
 
-    def freeze(self):
+    def _freeze(self):
+        """
+        call before enter train loop
+        convert program to compiled program
+        will do nothing if loss is None i.e. not in train mode
+        """
         if self._loss is None:
             log.debug('will not freeze a program without loss')
             return
@@ -278,8 +308,11 @@ class MonitoredExecutor(object):
             startup_program=self._program.startup_program)
 
     def __enter__(self):
+        """
+        prepapre before enter train loop
+        """
         log.debug('freezing program')
-        self.freeze()
+        self._freeze()
         log.debug('done freezing')
         log.info('********** Start Loop ************')
         # TODO init
@@ -291,6 +324,9 @@ class MonitoredExecutor(object):
         return self
 
     def run(self, fetch_list=[], *args, **kwargs):
+        """
+        wrapper for Executor.run
+        """
         #log.debug('Executor running step %d' % self._state.gstep)
         if self._hooks:
             fetch_list = [fetch_list]
@@ -310,7 +346,7 @@ class MonitoredExecutor(object):
                                 fetch_list=fetch_list,
                                 *args,
                                 **kwargs)
-            res = [self.merge_result(r) for r in res]
+            res = [self._merge_result(r) for r in res]
             #log.debug(res)
 
             res = util.unflatten(res, schema)
@@ -330,6 +366,9 @@ class MonitoredExecutor(object):
         return ret
 
     def __exit__(self, err_type, err_value, trace):
+        """
+        clean up things and report hook result when exit train loop
+        """
         if (err_type is None) or isinstance(err_value, (
                 F.core.EOFException, StopException, KeyboardInterrupt)):
             try:
@@ -344,7 +383,10 @@ class MonitoredExecutor(object):
             log.exception('error occur during loop %s: %s' %
                           (err_type, err_value))
 
-    def merge_result(self, ls):
+    def _merge_result(self, ls):
+        """
+        merge results from multi gpu cards
+        """
         dev_count = len(self._program.train_program._places) if isinstance(
             self._program.train_program, F.compiler.CompiledProgram) else 1
         if dev_count == 1:

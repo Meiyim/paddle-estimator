@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""common ML train and eval procedure"""
 from __future__ import print_function
 from __future__ import absolute_import
 from __future__ import unicode_literals
@@ -28,7 +29,8 @@ from time import time
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
-from propeller.types import RunMode, StopException, SummaryRecord, StopException, ModelSpec, InferenceSpec, ProgramPair, RunConfig
+from propeller.types import RunMode, StopException, SummaryRecord, StopException
+from propeller.types import ModelSpec, InferenceSpec, ProgramPair, RunConfig
 from propeller.paddle import summary, collection
 from propeller.paddle.data.functional import Dataset
 from propeller.paddle.train import distribution
@@ -43,7 +45,7 @@ log = logging.getLogger(__name__)
 __all__ = ['train_and_eval', 'Learner']
 
 
-def get_summary_writer(path):
+def _get_summary_writer(path):
     summary_writer = None
     try:
         from tensorboardX import SummaryWriter
@@ -54,7 +56,7 @@ def get_summary_writer(path):
     return summary_writer
 
 
-def log_eval_result(name, eval_result, swriter, state):
+def _log_eval_result(name, eval_result, swriter, state):
     log.debug(eval_result)
     printable = []
     for n, val in six.iteritems(eval_result):
@@ -71,7 +73,7 @@ def log_eval_result(name, eval_result, swriter, state):
         log.info('******************************')
 
 
-def build_net(model_fn, features, mode, params, run_config):
+def _build_net(model_fn, features, mode, params, run_config):
     model_spec = model_fn(
         features=features, mode=mode, params=params, run_config=run_config)
 
@@ -97,12 +99,14 @@ def build_net(model_fn, features, mode, params, run_config):
 
 
 class Learner(object):
+    """A Learner can train / eval / predict on a Dataset"""
+
     def __init__(self,
                  model_class_or_model_fn,
                  run_config,
                  params=None,
                  warm_start_setting=None):
-        '''
+        """
         model_class_or_model_fn(callable|propeller.train.Model): `model_class_or_model_fn` be specified in 2 ways:
             1. subclass of propeller.train.Model which implements:
                 1. \_\_init\_\_       (hyper_param, mode, run_config)
@@ -121,13 +125,13 @@ class Learner(object):
         params: any python object, will pass to your `model_fn` or `propeller.train.Model`
         run_config (propeller.RunConfig): run_config.max_steps should not be None.
         warm_start_setting (propeller.WarmStartSetting): Optional. warm start variable will overwrite model variable.
-        '''
+        """
         if run_config.model_dir is None:
             raise ValueError('model_dir should specified in run_config')
 
         if issubclass(model_class_or_model_fn, Model):
 
-            def model_fn(features, mode, params, run_config):
+            def _model_fn(features, mode, params, run_config):
                 if mode != RunMode.PREDICT:
                     fea, label = features[:-1], features[-1]
                 else:
@@ -163,16 +167,16 @@ class Learner(object):
                 else:
                     raise RuntimeError('unknown run mode %s' % mode)
         elif inspect.isfunction(model_class_or_model_fn):
-            model_fn = model_class_or_model_fn
+            _model_fn = model_class_or_model_fn
         else:
             raise ValueError('unknown model %s' % model_class_or_model_fn)
 
-        self.model_fn = model_fn
+        self.model_fn = _model_fn
         self.params = params
         self.run_config = run_config
         self.warm_start_setting = warm_start_setting
 
-    def build_for_train(self, train_dataset):
+    def _build_for_train(self, train_dataset):
         train_dataset.name = 'train'
         train_program = F.Program()
         startup_prog = F.Program()
@@ -181,8 +185,8 @@ class Learner(object):
                 with collection.Collections() as collections:
                     log.info('Building Train Graph...')
                     fea = train_dataset.features()
-                    model_spec = build_net(self.model_fn, fea, RunMode.TRAIN,
-                                           self.params, self.run_config)
+                    model_spec = _build_net(self.model_fn, fea, RunMode.TRAIN,
+                                            self.params, self.run_config)
                     log.info('Building Train Graph: Done')
 
                 scalars = collections.get(collection.Key.SUMMARY_SCALAR)
@@ -208,7 +212,7 @@ class Learner(object):
             train_program=train_program,
             startup_program=startup_prog), model_spec, summary_record
 
-    def build_for_eval(self, ds):
+    def _build_for_eval(self, ds):
         ds.name = 'eval'
         program = F.Program()
         startup_prog = F.Program()
@@ -217,8 +221,8 @@ class Learner(object):
             with F.unique_name.guard():
                 log.info('Building Eval Graph')
                 fea = ds.features()
-                model_spec = build_net(self.model_fn, fea, RunMode.EVAL,
-                                       self.params, self.run_config)
+                model_spec = _build_net(self.model_fn, fea, RunMode.EVAL,
+                                        self.params, self.run_config)
                 log.info('Done')
         program = program.clone(for_test=True)
         log.info(
@@ -227,7 +231,7 @@ class Learner(object):
         return ProgramPair(
             train_program=program, startup_program=startup_prog), model_spec
 
-    def build_for_predict(self, ds):
+    def _build_for_predict(self, ds):
         ds.name = 'predict'
         program = F.Program()
         startup_prog = F.Program()
@@ -236,8 +240,8 @@ class Learner(object):
             with F.unique_name.guard():
                 log.info('Building Predict Graph')
                 fea = ds.features()
-                model_spec = build_net(self.model_fn, fea, RunMode.PREDICT,
-                                       self.params, self.run_config)
+                model_spec = _build_net(self.model_fn, fea, RunMode.PREDICT,
+                                        self.params, self.run_config)
                 log.info('Done')
 
         program = program.clone(for_test=True)
@@ -249,11 +253,12 @@ class Learner(object):
             train_program=program, startup_program=startup_prog), model_spec
 
     def train(self, train_ds, train_hooks=[]):
+        """train on a `Dataset`"""
         if not isinstance(train_ds, Dataset):
             raise ValueError('expect dataset to be instance of Dataset, got %s'
                              % repr(train_ds))
 
-        train_program, model_spec, summary_record = self.build_for_train(
+        train_program, model_spec, summary_record = self._build_for_train(
             train_ds)
         train_run_hooks = [
             hooks.StopAtStepHook(self.run_config.max_steps,
@@ -261,7 +266,7 @@ class Learner(object):
             hooks.LoggingHook(
                 model_spec.loss,
                 summary_record=summary_record,
-                summary_writer=get_summary_writer(
+                summary_writer=_get_summary_writer(
                     os.path.join(self.run_config.model_dir, 'train_history')),
                 per_step=self.run_config.log_steps,
                 skip_step=self.run_config.skip_steps),
@@ -297,10 +302,11 @@ class Learner(object):
         return mon_exe.result
 
     def evaluate(self, eval_dataset, eval_hooks=[]):
+        """eval on a `Dataset`"""
         if not isinstance(eval_dataset, Dataset):
             raise ValueError('expect dataset to be instance of Dataset, got %s'
                              % repr(eval_dataset))
-        program, model_spec = self.build_for_eval(eval_dataset)
+        program, model_spec = self._build_for_eval(eval_dataset)
         single_card_place = F.cuda_places()[0]
         eval_executor = F.Executor(single_card_place)
 
@@ -326,31 +332,32 @@ class Learner(object):
 
         _, eval_result = mon_exe.result
 
-        summary_writer = get_summary_writer(
+        summary_writer = _get_summary_writer(
             os.path.join(self.run_config.model_dir, 'eval_history'))
-        log_eval_result('eval', eval_result, summary_writer, mon_exe.state)
+        _log_eval_result('eval', eval_result, summary_writer, mon_exe.state)
 
         return mon_exe.result
 
     def predict(self, predict_dataset, ckpt=None, steps=-1, split_batch=True):
-        '''
+        """
         Perform predictoin
         will call `model_fn` and initiate user-specifed model in `propeller.RunMode.PREDICT` mode 
 
         Args:
             infer_dataset (propeller.data.Dataset): should not `shuffle` or `repeat`
-            steps (int): steps to predict, if -1 is specifed, will stop when `StopException` is raised in `infer_dataset`
+            steps (int): steps to predict, if -1 is specifed, 
+                will stop when `StopException` is raised in `infer_dataset`
             split_batch (bool): if True, prediction of each example in a batch is returned.
 
         Yields:
             Evaluated values of predictions tensors.
 
-        '''
+        """
         if not isinstance(predict_dataset, Dataset):
             raise ValueError('expect dataset to be instance of Dataset, got %s'
                              % repr(predict_dataset))
 
-        program, model_spec = self.build_for_predict(predict_dataset)
+        program, model_spec = self._build_for_predict(predict_dataset)
         single_card_place = F.cuda_places()[0]
         executor = F.Executor(single_card_place)
         pred_run_config = RunConfig(
@@ -379,7 +386,7 @@ class Learner(object):
             pass
 
 
-def train_and_eval(_shit=None,
+def train_and_eval(_placeholder=None,
                    model_class_or_model_fn=None,
                    params=None,
                    run_config=None,
@@ -389,36 +396,27 @@ def train_and_eval(_shit=None,
                    train_hooks=[],
                    eval_hooks=[],
                    exporters=[]):
-    '''
+    """
     Perform train and evaluate procesure. 
     will call `model_fn` and initiate user-specifed model in `propeller.RunMode.PREDICT` mode 
 
     Args:
         model_class_or_model_fn(callable|propeller.train.Model): `model_class_or_model_fn` be specified in 2 ways:
-            1. subclass of propeller.train.Model which implements:
-                1. \_\_init\_\_       (hyper_param, mode, run_config)
-                2. forward            (features) => (prediction)
-                3. backword           (loss) => None
-                4. loss               (predictoin) => (loss)
-                5. metrics (optional) (prediction) => (dict of propeller.Metrics)
-                
-            2. a model_fn takes following args:
-                1. features
-                2. param
-                3. mode
-                4. run_config(optional)
+            1. subclass of propeller.train.Model
+            2. a model_fn takes following args: 1. features; 2. param; 3. mode; 4. run_config(optional)
                and returns a `propeller.ModelSpec`
 
         params: any python object, will pass to your `model_fn` or `propeller.train.Model`
         run_config (propeller.RunConfig): run_config.max_steps should not be None.
         train_dataset (propeller.paddle.data.Dataset): training will stop if global_step > run_config.max_steps.
-        eval_dataset (propeller.paddle.data.Dataset|dict): Optional, if Dict of propeller.data.Dataset were specified, will perform evluatation on every evaluation sets and report results.
+        eval_dataset (propeller.paddle.data.Dataset|dict): Optional, if Dict of propeller.data.Dataset were specified, 
+            will perform evluatation on every evaluation sets and report results.
         warm_start_setting (propeller.WarmStartSetting): Optional. warm start variable will overwrite model variable.
         train_hooks (list of propeller.paddle.train.RunHook): Optional.
         eval_hooks (list of propeller.paddle.train.RunHook): Optional.
         exporters (list of propeller.paddle.train.Exporter): Optional.
-    '''
-    if _shit is not None:
+    """
+    if _placeholder is not None:
         raise ValueError('specify keyword args to this function')
     if model_class_or_model_fn is None or params is None or run_config is None or train_dataset is None:
         raise ValueError(
@@ -454,13 +452,13 @@ def train_and_eval(_shit=None,
         params,
         warm_start_setting=warm_start_setting)
 
-    class EvalHookOnTrainLoop(hooks.RunHook):
+    class _EvalHookOnTrainLoop(hooks.RunHook):
         def __init__(self):
-            self.program, self.model_spec = est.build_for_eval(
+            self.program, self.model_spec = est._build_for_eval(
                 list(eval_dataset.values())[
                     0])  #eval_datasets must have same output shapes
             self.summary_writers = {
-                ds_name: get_summary_writer(
+                ds_name: _get_summary_writer(
                     os.path.join(
                         os.path.join(run_config.model_dir, 'eval_history'),
                         ds_name))
@@ -468,6 +466,7 @@ def train_and_eval(_shit=None,
             }
 
         def after_run(self, _, state):
+            """doc"""
             if state.step > run_config.skip_steps and state.gstep % run_config.eval_steps == 0:
                 eval_results = {}
                 for name, ds in six.iteritems(eval_dataset):
@@ -495,8 +494,8 @@ def train_and_eval(_shit=None,
                     eval_res = hook_results[
                         1]  # hook_results:  [StopAtStepHook, EvalHook, ...]
                     eval_results[name] = eval_res
-                    log_eval_result(name, eval_res, self.summary_writers[name],
-                                    state)
+                    _log_eval_result(name, eval_res,
+                                     self.summary_writers[name], state)
                 for exporter in exporters:
                     exporter.export(eval_executor, self.program,
                                     self.model_spec, eval_results, state)
@@ -505,6 +504,6 @@ def train_and_eval(_shit=None,
             return eval_results
 
     if distribution.status.is_master:
-        train_hooks.append(EvalHookOnTrainLoop())
+        train_hooks.append(_EvalHookOnTrainLoop())
     res = est.train(train_dataset, train_hooks=train_hooks)
     return res
