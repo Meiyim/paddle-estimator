@@ -56,6 +56,11 @@ def _get_summary_writer(path):
     return summary_writer
 
 
+def _get_one_place():
+    return F.cuda_places()[0] if F.core.is_compiled_with_cuda(
+    ) else F.cpu_places()[0]
+
+
 def _log_eval_result(name, eval_result, swriter, state):
     log.debug(eval_result)
     printable = []
@@ -272,7 +277,7 @@ class Learner(object):
                 skip_step=self.run_config.skip_steps),
         ]
         train_run_hooks.extend(train_hooks)
-        train_executor = F.Executor(F.cuda_places()[0])
+        train_executor = F.Executor(_get_one_place())
 
         mon_exe = MonitoredExecutor(
             train_executor,
@@ -307,7 +312,7 @@ class Learner(object):
             raise ValueError('expect dataset to be instance of Dataset, got %s'
                              % repr(eval_dataset))
         program, model_spec = self._build_for_eval(eval_dataset)
-        single_card_place = F.cuda_places()[0]
+        single_card_place = _get_one_place()
         eval_executor = F.Executor(single_card_place)
 
         eval_hooks = [
@@ -358,7 +363,7 @@ class Learner(object):
                              % repr(predict_dataset))
 
         program, model_spec = self._build_for_predict(predict_dataset)
-        single_card_place = F.cuda_places()[0]
+        single_card_place = _get_one_place()
         executor = F.Executor(single_card_place)
         pred_run_config = RunConfig(
             run_steps=steps if steps == -1 else None,
@@ -371,7 +376,7 @@ class Learner(object):
         try:
             with mon_exe:
                 log.info('Runining predict from dir: %s' % repr(mon_exe.state))
-                single_card_place = F.cuda_places()[0]
+                single_card_place = _get_one_place()
                 for data in predict_dataset.start(places=[single_card_place]):
                     res = mon_exe.run(fetch_list=model_spec.predictions,
                                       feed=data)
@@ -477,7 +482,7 @@ def train_and_eval(_placeholder=None,
                             self.model_spec.metrics,
                             summary_writer=self.summary_writers[name], )
                     ]
-                    single_card_place = F.cuda_places()[0]
+                    single_card_place = _get_one_place()
                     eval_executor = F.Executor(single_card_place)
                     mon_exe = MonitoredExecutor(
                         eval_executor,

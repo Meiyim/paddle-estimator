@@ -41,6 +41,11 @@ log = logging.getLogger(__name__)
 __all__ = ['MonitoredExecutor', 'Saver']
 
 
+def _get_one_place():
+    return F.cuda_places()[0] if F.core.is_compiled_with_cuda(
+    ) else F.cpu_places()[0]
+
+
 class RunState(object):
     """serializable Run state object"""
 
@@ -240,7 +245,7 @@ class MonitoredExecutor(object):
         # The order of this 2 steps really matters
         # 1. init train
 
-        F.Executor(F.cuda_places()[0]).run(self._program.startup_program)
+        F.Executor(_get_one_place()).run(self._program.startup_program)
         # 2. restore param
         if self._warm_start_setting is not None:
             if not os.path.exists(self._warm_start_setting.from_dir):
@@ -256,7 +261,7 @@ class MonitoredExecutor(object):
                     return ret
 
                 F.io.load_vars(
-                    F.Executor(F.cuda_places()[0]),
+                    F.Executor(_get_one_place()),
                     self._warm_start_setting.from_dir,
                     main_program=self._program.train_program,
                     predicate=_fn)
@@ -265,7 +270,7 @@ class MonitoredExecutor(object):
 
         self._saver = Saver(
             self._model_dir,
-            F.Executor(F.cuda_places()[0]),
+            F.Executor(_get_one_place()),
             program=self._program.train_program,
             max_ckpt_to_keep=self._max_ckpt)
         if self._saver.last_ckpt is not None:
@@ -311,6 +316,11 @@ class MonitoredExecutor(object):
         """
         prepapre before enter train loop
         """
+        if F.core.is_compiled_with_cuda():
+            log.info('propeller runs in CUDA mode')
+        else:
+            log.info('propeller runs in CPU mode')
+
         log.debug('freezing program')
         self._freeze()
         log.debug('done freezing')
@@ -342,6 +352,7 @@ class MonitoredExecutor(object):
             ]
             #if len(set(fetch_list)) != len(fetch_list):
             #    log.error('strange shit happend when fetch list has idetity tensors %s' % fetch_list)
+            #log.debug(fetch_list)
             res = self._exe.run(self._program.train_program,
                                 fetch_list=fetch_list,
                                 *args,

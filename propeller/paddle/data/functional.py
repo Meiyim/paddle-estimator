@@ -58,7 +58,8 @@ class Dataset(DatasetBase):
     def start(self, places=None):
         """start Pyreader"""
         if places is None:
-            places = F.cuda_places()
+            places = F.cuda_places() if F.core.is_compiled_with_cuda(
+            ) else F.cpu_places()
         #assert self.pyreader is not None, 'use Dataset.features to build net first, then start dataset'
         def _gen():
             try:
