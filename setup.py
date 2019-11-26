@@ -11,12 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""
+doc
+"""
 
 from pkg_resources import DistributionNotFound, get_distribution
 from setuptools import setup, find_packages
 
 
 def get_dist(pkgname):
+    """doc"""
     try:
         return get_distribution(pkgname)
     except DistributionNotFound:
