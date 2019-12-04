@@ -343,7 +343,7 @@ class Learner(object):
 
         return mon_exe.result
 
-    def predict(self, predict_dataset, ckpt=None, steps=-1, split_batch=True):
+    def predict(self, predict_dataset, ckpt=-1, steps=-1, split_batch=True):
         """
         Perform predictoin
         will call `model_fn` and initiate user-specifed model in `propeller.RunMode.PREDICT` mode 
@@ -352,6 +352,7 @@ class Learner(object):
             infer_dataset (propeller.data.Dataset): should not `shuffle` or `repeat`
             steps (int): steps to predict, if -1 is specifed, 
                 will stop when `StopException` is raised in `infer_dataset`
+            ckpt (int|str): index or name of the checkpoint to load from, default to -1.
             split_batch (bool): if True, prediction of each example in a batch is returned.
 
         Yields:
@@ -372,7 +373,7 @@ class Learner(object):
             executor,
             program,
             run_config=pred_run_config, )
-        mon_exe.init_or_restore_variables()
+        mon_exe.init_or_restore_variables(ckpt)
         try:
             with mon_exe:
                 log.info('Runining predict from dir: %s' % repr(mon_exe.state))

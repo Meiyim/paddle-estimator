@@ -237,7 +237,7 @@ class MonitoredExecutor(object):
         """doc"""
         return self._state
 
-    def init_or_restore_variables(self):
+    def init_or_restore_variables(self, ckpt=-1):
         """
         init vars or restore vars from model_dir
         call before train
@@ -274,7 +274,7 @@ class MonitoredExecutor(object):
             program=self._program.train_program,
             max_ckpt_to_keep=self._max_ckpt)
         if self._saver.last_ckpt is not None:
-            self._state = self._saver.restore()
+            self._state = self._saver.restore(ckpt)
 
     def _freeze(self):
         """
