@@ -1,3 +1,4 @@
+#coding=utf-8
 #   Copyright (c) 2018 PaddlePaddle Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,7 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""toy example"""
+from __future__ import print_function
+from __future__ import absolute_import
+from __future__ import unicode_literals
 
 import os
 import time
@@ -23,7 +26,6 @@ import paddle.fluid as F
 import paddle.fluid.layers as L
 
 from random import random
-import jieba
 
 import propeller
 import propeller.data
@@ -128,26 +130,73 @@ class ToyModel(Model):
         return {'acc': acc, 'auc': auc}
 
 
+def make_test_data():
+    if not os.path.exists('./train'):
+        os.mkdir('./train')
+    with open('./train/part-0', 'w') as f:
+        f.write('''pen\ti have a pen\t1
+apple\ti have an apple\t1
+apple\toh~ apple pen\t0
+pen\ti have a pen\t1
+pen\ti have an pine apple\t0
+pen\toh~ pine apple pen\t1''')
+    if not os.path.exists('./dev'):
+        os.mkdir('./dev')
+    with open('./dev/part-0', 'w') as f:
+        f.write('''pen\ti have a pen\t1
+apple\ti have a pen\t0''')
+
+
+def clean():
+    os.system('rm -rf train train_gz dev dev_gz model')
+
+
 if __name__ == '__main__':
+    make_test_data()
     parser = propeller.ArgumentParser('DAN model with Paddle')
-    parser.add_argument('--vocab_size', type=int, default=300000)
     parser.add_argument('--max_seqlen', type=int, default=128)
-    parser.add_argument('--train_data_dir', type=str)
-    parser.add_argument('--eval_data_dir', type=str)
-    parser.add_argument('--vocab_file', type=str)
-
+    parser.add_argument('--train_data_dir', type=str, default='./train')
+    parser.add_argument('--eval_data_dir', type=str, default='./dev')
     args = parser.parse_args()
-    run_config = propeller.parse_runconfig(args)
-    hparams = propeller.parse_hparam(args)
 
-    def jb_tokenizer(sen):
-        return [s for s in jieba.cut(sen) if s != ' ']
+    vocab = {
+        b'i': 0,
+        b'have': 1,
+        b'a': 2,
+        b'an': 3,
+        b'pine': 4,
+        b'apple': 5,
+        b'pen': 6,
+        b'oh': 7,
+    }
+
+    run_config = propeller.RunConfig(**{
+        'batch_size': 2,
+        'model_dir': './model',
+        'max_steps': 1000,
+        'save_steps': 100,
+        'log_steps': 10,
+        'eval_steps': 100,
+        'skip_steps': 10,
+    })
+
+    hparams = {
+        'vocab_size': 10,
+        'hidden_size': 128,
+        'embedding_size': 128,
+        'num_layers': 3,
+        'learning_rate': 1.e-4,
+    }
+
+    def tokenizer(sen):
+        log.debug(sen)
+        return sen.split(b' ')
 
     feature_column = propeller.data.FeatureColumns([
         propeller.data.TextColumn(
-            'title', vocab_file=args.vocab_file, tokenizer=jb_tokenizer),
+            'title', vocab_list=vocab, tokenizer=tokenizer),
         propeller.data.TextColumn(
-            'comment', vocab_file=args.vocab_file, tokenizer=jb_tokenizer),
+            'comment', vocab_list=vocab, tokenizer=tokenizer),
         propeller.data.LabelColumn('label'),
     ])
 
@@ -181,3 +230,5 @@ if __name__ == '__main__':
     eval_ds.data_types = types
 
     propeller.train_and_eval(ToyModel, hparams, run_config, train_ds, eval_ds)
+
+    clean()
