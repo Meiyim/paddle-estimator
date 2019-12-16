@@ -106,6 +106,8 @@ ModelSpec = namedtuple('ModelSpec', [
     'metrics',
     'mode',
     'inference_spec',
+    'train_hooks',
+    'eval_hooks',
 ])
 ModelSpec.__new__.__defaults__ = (None, ) * len(ModelSpec._fields)
 
