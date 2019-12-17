@@ -164,21 +164,18 @@ class Saver(object):
 
     def restore(self, ckpt=-1):
         """doc"""
-        if not isinstance(ckpt, (int, ) + six.string_types):
-            raise ValueError('ckpt type not understood %s' % repr(ckpt))
         if isinstance(ckpt, int):
             try:
-                ckpt = self.ckpt_list[ckpt]
+                path = os.path.join(self._save_dir, self.ckpt_list[ckpt])
             except IndexError:
                 raise ValueError('invalid restore ckpt number %d' % ckpt)
-        if isinstance(ckpt, six.string_types):
-            try:
-                ckpt = self.ckpt_list.index(ckpt)
-            except ValueError:
-                raise ValueError('ckpt: %s not in ckpt list: %s' %
-                                 (ckpt, self.ckpt_list))
+        elif isinstance(ckpt, six.string_types):
+            if not os.path.exists(ckpt):
+                raise ValueError('ckpt: %s not found' % ckpt)
+            path = ckpt
+        else:
+            raise ValueError('ckpt type not understood %s' % repr(ckpt))
 
-        path = os.path.join(self._save_dir, self.ckpt_list[ckpt])
         meta_file = os.path.join(path, 'meta')
         if not os.path.exists(meta_file):
             raise RuntimeError('meta not found in restore dir: %s' % path)
@@ -237,7 +234,7 @@ class MonitoredExecutor(object):
         """doc"""
         return self._state
 
-    def init_or_restore_variables(self):
+    def init_or_restore_variables(self, ckpt=-1):
         """
         init vars or restore vars from model_dir
         call before train
@@ -274,7 +271,7 @@ class MonitoredExecutor(object):
             program=self._program.train_program,
             max_ckpt_to_keep=self._max_ckpt)
         if self._saver.last_ckpt is not None:
-            self._state = self._saver.restore()
+            self._state = self._saver.restore(ckpt)
 
     def _freeze(self):
         """
