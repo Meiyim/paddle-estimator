@@ -276,7 +276,10 @@ class Learner(object):
                 per_step=self.run_config.log_steps,
                 skip_step=self.run_config.skip_steps),
         ]
+        if model_spec.train_hooks is not None:
+            train_run_hooks.extend(model_spec.train_hooks)
         train_run_hooks.extend(train_hooks)
+
         train_executor = F.Executor(_get_one_place())
 
         mon_exe = MonitoredExecutor(
@@ -315,17 +318,21 @@ class Learner(object):
         single_card_place = _get_one_place()
         eval_executor = F.Executor(single_card_place)
 
-        eval_hooks = [
+        eval_run_hooks = [
             hooks.StopAtStepHook(self.run_config.eval_max_steps,
                                  self.run_config.eval_max_steps),
             hooks.EvalHook(model_spec.metrics, )
         ]
 
+        if model_spec.eval_hooks is not None:
+            eval_run_hooks.extend(model_spec.eval_hooks)
+        eval_run_hooks.extend(eval_hooks)
+
         mon_exe = MonitoredExecutor(
             eval_executor,
             program,
             run_config=self.run_config,
-            run_hooks=eval_hooks)
+            run_hooks=eval_run_hooks)
         mon_exe.init_or_restore_variables()
 
         try:
