@@ -135,42 +135,7 @@ class Learner(object):
             raise ValueError('model_dir should specified in run_config')
 
         if issubclass(model_class_or_model_fn, Model):
-
-            def _model_fn(features, mode, params, run_config):
-                if mode != RunMode.PREDICT:
-                    fea, label = features[:-1], features[-1]
-                else:
-                    fea = features
-
-                model = model_class_or_model_fn(
-                    params, mode, run_config=run_config)
-                pred = model.forward(fea)
-                if isinstance(pred, F.framework.Variable):
-                    prediction = [pred]
-                else:
-                    prediction = pred
-                if mode == RunMode.TRAIN:
-                    loss = model.loss(pred, label)
-                    model.backward(loss)
-                    return ModelSpec(
-                        loss=loss, predictions=prediction, mode=mode)
-                elif mode == RunMode.EVAL:
-                    loss = model.loss(pred, label)
-                    me = model.metrics(pred, label)
-
-                    inf_spec = InferenceSpec(inputs=fea, outputs=prediction)
-                    if 'loss' not in me:
-                        me['loss'] = metrics.Mean(loss)
-                    return ModelSpec(
-                        loss=loss,
-                        predictions=prediction,
-                        metrics=me,
-                        mode=mode,
-                        inference_spec=inf_spec)
-                elif mode == RunMode.PREDICT:
-                    return ModelSpec(predictions=prediction, mode=mode)
-                else:
-                    raise RuntimeError('unknown run mode %s' % mode)
+            _model_fn = _build_model_fn(model_class_or_model_fn)
         elif inspect.isfunction(model_class_or_model_fn):
             _model_fn = model_class_or_model_fn
         else:
@@ -530,3 +495,43 @@ def train_and_eval(_placeholder=None,
         train_hooks.append(_EvalHookOnTrainLoop())
     res = est.train(train_dataset, train_hooks=train_hooks)
     return res
+
+
+def _build_model_fn(model_class):
+    def _model_fn(features, mode, params, run_config):
+        if mode != RunMode.PREDICT:
+            fea, label = features[:-1], features[-1]
+        else:
+            fea = features
+
+        model = model_class(params, mode, run_config=run_config)
+        pred = model.forward(fea)
+        if isinstance(pred, F.framework.Variable):
+            prediction = [pred]
+        else:
+            prediction = pred
+        if mode == RunMode.TRAIN:
+            loss = model.loss(pred, label)
+            model.backward(loss)
+            return ModelSpec(loss=loss, predictions=prediction, mode=mode)
+        elif mode == RunMode.EVAL:
+            loss = model.loss(pred, label)
+            me = model.metrics(pred, label)
+
+            inf_spec = InferenceSpec(inputs=fea, outputs=prediction)
+            if 'loss' not in me:
+                me['loss'] = metrics.Mean(loss)
+            return ModelSpec(
+                loss=loss,
+                predictions=prediction,
+                metrics=me,
+                mode=mode,
+                inference_spec=inf_spec)
+        elif mode == RunMode.PREDICT:
+            inf_spec = InferenceSpec(inputs=fea, outputs=prediction)
+            return ModelSpec(
+                predictions=prediction, mode=mode, inference_spec=inf_spec)
+        else:
+            raise RuntimeError('unknown run mode %s' % mode)
+
+    return _model_fn
