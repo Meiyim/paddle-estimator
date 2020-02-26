@@ -161,6 +161,17 @@ def _take_func(dataset, count):
     return _gen
 
 
+def _chain_func(dataset, dataset2):
+    def _gen():
+        iterable = dataset()
+        iterable2 = dataset2()
+        ret = itertools.chain(iterable, iterable2)
+        for i in ret:
+            yield i
+
+    return _gen
+
+
 def _buffered_func(dataset, size):
     """
     Creates a buffered data reader.
@@ -449,4 +460,8 @@ class Dataset(object):
     def buffered(self, size=10):
         """doc"""
         func = functools.partial(_buffered_func, size=size)
+        return self.apply(func)
+
+    def chain(self, other):
+        func = functools.partial(_chain_func, dataset2=other.generator)
         return self.apply(func)
