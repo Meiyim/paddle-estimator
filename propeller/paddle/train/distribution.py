@@ -60,7 +60,7 @@ class DistributionStatus(object):
             except KeyError as e:
                 raise ValueError(
                     'PROPELLER_DISCONFIG wrong: %s not found in %s' %
-                    (e, repr(dis_config)))
+                    (e, repr(config)))
 
     @property
     def mode(self):
