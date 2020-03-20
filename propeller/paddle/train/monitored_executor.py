@@ -32,8 +32,9 @@ import paddle.fluid as F
 import paddle.fluid.layers as L
 
 from propeller import util
-from propeller.types import StopException, ProgramPair
+from propeller.types import StopException, ProgramPair, WarmStartSetting, TextoneWarmStartSetting
 from propeller.paddle.train import hooks
+from propeller.paddle import textone_ak, textone_sk
 from . import distribution
 
 log = logging.getLogger(__name__)
@@ -107,11 +108,10 @@ class Saver(object):
                  save_prefix='model',
                  max_ckpt_to_keep=None):
         """doc"""
-        if exe is not None:
-            assert isinstance(
-                exe, F.Executor
-            ), 'expect normal executor to save, got executor of type %s' % repr(
-                type(exe))
+        assert isinstance(
+            exe, F.Executor
+        ), 'expect normal executor to save, got executor of type %s' % repr(
+            type(exe))
         self._exe = exe
         self._program = program
         self._save_dir = save_dir
@@ -133,6 +133,35 @@ class Saver(object):
         """doc"""
         return self.ckpt_list[-1] if len(self.ckpt_list) else None
 
+    def _save_program(self, dir):
+        F.io.save_persistables(self._exe, dir, self._program.train_program)
+
+    def _load_program(self, dir, predicate_fn=None):
+        if predicate_fn is None:
+
+            def _fn(v):
+                vpath = os.path.join(dir, v.name)
+                if F.io.is_persistable(v):
+                    if os.path.exists(vpath):
+                        return True
+                    else:
+                        log.warning('var %s not found in checkpoint, ignored' %
+                                    v.name)
+                return False
+
+            predicate_fn = _fn
+        try:
+            F.io.load_vars(
+                self._exe,
+                dir,
+                main_program=self._program.train_program,
+                predicate=predicate_fn)
+        except F.core.EnforceNotMet as e:
+            log.exception(e)
+            raise RuntimeError(
+                'can not load model from %s, is this a textone checkpoint?' %
+                dir)
+
     def save(self, state):
         """doc"""
         save_name = '%s_%d' % (self._save_prefix, state.gstep)
@@ -144,7 +173,7 @@ class Saver(object):
         except OSError:
             pass
         log.debug('saving step %d to %s' % (state.gstep, save_dir))
-        F.io.save_persistables(self._exe, tmp_dir, self._program)
+        self._save_program(tmp_dir)
         shutil.move(tmp_dir, save_dir)
         meta = state.serialize()
         open(os.path.join(save_dir, 'meta'), 'w').write(meta)
@@ -182,23 +211,125 @@ class Saver(object):
         state = RunState.from_str(open(meta_file).read())
         log.info('restore from ckpt %s, ckpt-status: %s' % (path, repr(state)))
 
-        def _fn(v):
-            vpath = os.path.join(path, v.name)
-            if F.io.is_persistable(v):
-                if os.path.exists(vpath):
-                    return True
-                else:
-                    log.warning('var %s not found in checkpoint, ignored' %
-                                v.name)
-            return False
-
-        F.io.load_vars(
-            self._exe, path, main_program=self._program, predicate=_fn)
+        self._load_program(path)
         return state
+
+
+try:
+    from textone.training.base_trainer import BaseTrainer, ProgramSingle
+    from textone.modules.ernie import ErnieModel, ErnieConfig
+
+    class TextoneSaver(Saver):
+        def __init__(self,
+                     save_dir,
+                     exe,
+                     program,
+                     save_prefix='model',
+                     max_ckpt_to_keep=None):
+            """f"""
+            super(TextoneSaver, self).__init__(save_dir, exe, program,
+                                               save_prefix, max_ckpt_to_keep)
+
+            class _BaseTrainer(BaseTrainer):
+                def __init__(fakeself):
+                    fakeself.params = {
+                        'load_parameters': None,
+                        'load_checkpoint': None,
+                        'use_fp16': 0
+                    }
+                    fakeself.need_encrypt = True
+                    ProgramSingle.x = {
+                        'startup_program': self._program.startup_program,
+                        'train_program': self._program.train_program
+                    }
+                    fakeself.run_place = _get_one_place()
+                    fakeself.executor = self._exe
+                    fakeself.need_remove_tmp = True
+                    fakeself.model_class = None
+                    fakeself.is_fleet = False
+                    fakeself.version = "cloud_release_1.2.0"
+                    fakeself.init_auth()
+
+            self.bt = _BaseTrainer()
+
+        def _load_pretrained(self, dir):
+            self.bt.params.update(load_parameters=dir, load_checkpoint=None)
+            log.debug('loading param with texone')
+            self.bt.load_model_params('net_model')
+
+        def _load_program(self, dir):
+            self.bt.params.update(load_checkpoint=dir, load_parameters=None)
+            log.debug('loading ckpt with texone %s' % dir)
+            self.bt.load_model_params('net_model')
+
+        def _save_program(self, dir):
+            self.bt.params.update(load_checkpoint=dir, load_parameters=None)
+            log.debug('saving ckpt with texone')
+            self.bt.save_checkpoint(self._exe, dir,
+                                    self._program.train_program, 0)
+
+        def save(self, state):
+            """doc"""
+            save_name = '%s_%d' % (self._save_prefix, state.gstep)
+            save_dir = os.path.join(self._save_dir, save_name)
+            tmp_dir = os.path.join(self._save_dir, 'tmp')
+            try:
+                shutil.rmtree(save_dir)
+                shutil.rmtree(tmp_dir)
+            except OSError:
+                pass
+            log.debug('saving step %d to %s' % (state.gstep, save_dir))
+            self._save_program(tmp_dir)
+            #shutil.move(os.path.join(tmp_dir, 'checkpoints_step_0_enc'), save_dir)
+            shutil.move(tmp_dir, save_dir)
+            meta = state.serialize()
+            open(os.path.join(save_dir, 'meta'), 'w').write(meta)
+
+            self.ckpt_list.append(save_name)
+            if len(self.ckpt_list) > self._max_ckpt_to_keep:
+                ckpt_to_keep = self.ckpt_list[-self._max_ckpt_to_keep:]
+                ckpt_to_remove = set(self.ckpt_list) - set(ckpt_to_keep)
+                self.ckpt_list = ckpt_to_keep
+                for ckpt in ckpt_to_remove:
+                    ckpt_dir = os.path.join(self._save_dir, ckpt)
+                    if os.path.exists(ckpt_dir):
+                        shutil.rmtree(ckpt_dir)
+                        log.debug('No. of ckpt exceed %d, clean up: %s' %
+                                  (self._max_ckpt_to_keep, ckpt_dir))
+            open(self.ckpt_info_path, 'w').write('\n'.join(self.ckpt_list))
+
+        def restore(self, ckpt=-1):
+            """doc"""
+            if isinstance(ckpt, int):
+                try:
+                    path = os.path.join(self._save_dir, self.ckpt_list[ckpt])
+                except IndexError:
+                    raise ValueError('invalid restore ckpt number %d' % ckpt)
+            elif isinstance(ckpt, six.string_types):
+                if not os.path.exists(ckpt):
+                    raise ValueError('ckpt: %s not found' % ckpt)
+                path = ckpt
+            else:
+                raise ValueError('ckpt type not understood %s' % repr(ckpt))
+
+            meta_file = os.path.join(path, 'meta')
+            if not os.path.exists(meta_file):
+                raise RuntimeError('meta not found in restore dir: %s' % path)
+            state = RunState.from_str(open(meta_file).read())
+            log.info('restore from ckpt %s, ckpt-status: %s' %
+                     (path, repr(state)))
+
+            self._load_program(os.path.join(path, 'checkpoints_step_0_enc'))
+            return state
+
+except ImportError:
+    TextoneSaver = None
+    log.warning('textone not found! will not load encrepted model')
 
 
 class MonitoredExecutor(object):
     """An Executor wrapper handling the train loop"""
+    saver_class = Saver if TextoneSaver is None else TextoneSaver
 
     def __init__(
             self,
@@ -244,32 +375,46 @@ class MonitoredExecutor(object):
 
         F.Executor(_get_one_place()).run(self._program.startup_program)
         # 2. restore param
+
+        self._saver = self.saver_class(
+            self._model_dir,
+            F.Executor(_get_one_place()),
+            program=self._program,
+            max_ckpt_to_keep=self._max_ckpt)
+
         if self._warm_start_setting is not None:
             if not os.path.exists(self._warm_start_setting.from_dir):
                 raise ValueError('warm start dir not exists: %s' %
                                  self._warm_start_setting.from_dir)
-            log.info("warm start from %s" % self._warm_start_setting.from_dir)
-            if self._warm_start_setting.predicate_fn is not None:
 
-                def _fn(v):
-                    ret = self._warm_start_setting.predicate_fn(v)
-                    if ret:
-                        log.info('warm start: %s' % v.name)
-                    return ret
+            if isinstance(self._warm_start_setting, WarmStartSetting):
+                log.info("warm start from %s" %
+                         self._warm_start_setting.from_dir)
+                if self._warm_start_setting.predicate_fn is not None:
 
-                F.io.load_vars(
-                    F.Executor(_get_one_place()),
-                    self._warm_start_setting.from_dir,
-                    main_program=self._program.train_program,
-                    predicate=_fn)
+                    def _fn(v):
+                        ret = self._warm_start_setting.predicate_fn(v)
+                        if ret:
+                            log.info('warm start: %s' % v.name)
+                        return ret
+
+                    self._saver._load_program(
+                        self._warm_start_setting.from_dir, predicate_fn=_fn)
+                else:
+                    raise NotImplementedError()
+            elif isinstance(self._warm_start_setting, TextoneWarmStartSetting):
+                if TextoneSaver is None:
+                    raise ValueError(
+                        'try to warm start from textone pretrain dir, but textone not installed'
+                    )
+                log.info("[texone] warm start from %s" %
+                         self._warm_start_setting.from_dir)
+                self._saver._load_pretrained(self._warm_start_setting.from_dir)
             else:
-                raise NotImplementedError()
+                raise ValueError(
+                    'expect _warm_start_setting to be TextoneWarmStartSetting of WarmStartSetting, got %s'
+                    % repr(self._warm_start_setting))
 
-        self._saver = Saver(
-            self._model_dir,
-            F.Executor(_get_one_place()),
-            program=self._program.train_program,
-            max_ckpt_to_keep=self._max_ckpt)
         if self._saver.last_ckpt is not None:
             self._state = self._saver.restore(ckpt)
 

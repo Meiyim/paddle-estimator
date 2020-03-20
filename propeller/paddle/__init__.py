@@ -19,6 +19,23 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import six
+import logging
+textone_ak, textone_sk = None, None
+
+log = logging.getLogger(__name__)
+
+
+def init_textone(ak, sk):
+    try:
+        import textone
+    except ImportError:
+        log.fatal('init textone failed: textone not found!')
+        raise
+    global textone_ak, textone_sk
+    log.debug('init textone with ak:%r sk:%r' % (ak, sk))
+    textone_ak, textone_sk = ak, sk
+
+
 from propeller.types import *
 from propeller.util import ArgumentParser, parse_hparam, parse_runconfig, parse_file
 
