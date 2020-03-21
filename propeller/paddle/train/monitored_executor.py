@@ -34,7 +34,6 @@ import paddle.fluid.layers as L
 from propeller import util
 from propeller.types import StopException, ProgramPair, WarmStartSetting, TextoneWarmStartSetting
 from propeller.paddle.train import hooks
-from propeller.paddle import textone_ak, textone_sk
 from . import distribution
 
 log = logging.getLogger(__name__)
@@ -247,7 +246,7 @@ try:
                     fakeself.need_remove_tmp = True
                     fakeself.model_class = None
                     fakeself.is_fleet = False
-                    fakeself.version = "cloud_release_1.2.0"
+                    fakeself.version = "1.0.0"
                     fakeself.init_auth()
 
             self.bt = _BaseTrainer()
@@ -257,7 +256,7 @@ try:
             log.debug('loading param with texone')
             self.bt.load_model_params('net_model')
 
-        def _load_program(self, dir):
+        def _load_program(self, dir, predicate_fn=None):
             self.bt.params.update(load_checkpoint=dir, load_parameters=None)
             log.debug('loading ckpt with texone %s' % dir)
             self.bt.load_model_params('net_model')
@@ -329,7 +328,7 @@ except ImportError:
 
 class MonitoredExecutor(object):
     """An Executor wrapper handling the train loop"""
-    saver_class = Saver if TextoneSaver is None else TextoneSaver
+    saver_class = Saver  # will change if textone enabled
 
     def __init__(
             self,
@@ -344,6 +343,8 @@ class MonitoredExecutor(object):
             raise ValueError('PE is no longer supported')
         if isinstance(executor, F.ParallelExecutor):
             raise ValueError('ParallelExecutor is deprecatd, use Executor')
+        if not isinstance(program, ProgramPair):
+            raise ValueError('Expect ProgramPair, got %r' % type(program))
         self._exe = executor
         self._hooks = run_hooks
         self._state = RunState()  # might be overwrite in freeze
@@ -390,6 +391,11 @@ class MonitoredExecutor(object):
             if isinstance(self._warm_start_setting, WarmStartSetting):
                 log.info("warm start from %s" %
                          self._warm_start_setting.from_dir)
+                log.info(self._saver)
+                if not type(self._saver) is Saver:
+                    raise ValueError(
+                        'try to warm start from standart dir, but textone enabled'
+                    )
                 if self._warm_start_setting.predicate_fn is not None:
 
                     def _fn(v):
@@ -403,9 +409,9 @@ class MonitoredExecutor(object):
                 else:
                     raise NotImplementedError()
             elif isinstance(self._warm_start_setting, TextoneWarmStartSetting):
-                if TextoneSaver is None:
+                if not type(self._saver) is TextoneSaver:
                     raise ValueError(
-                        'try to warm start from textone pretrain dir, but textone not installed'
+                        'try to warm start from textone pretrain dir, but textone not enabled'
                     )
                 log.info("[texone] warm start from %s" %
                          self._warm_start_setting.from_dir)
@@ -463,9 +469,9 @@ class MonitoredExecutor(object):
         else:
             log.info('propeller runs in CPU mode')
 
-        log.debug('freezing program')
+        #log.debug('freezing program')
         self._freeze()
-        log.debug('done freezing')
+        #log.debug('done freezing')
         log.info('********** Start Loop ************')
         # TODO init
 

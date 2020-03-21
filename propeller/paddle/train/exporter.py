@@ -70,10 +70,7 @@ class BestExporter(Exporter):
             # FIXME: all eval datasets has same name/types/shapes now!!! so every eval program are the smae
 
             saver = Saver(
-                self._export_dir,
-                exe,
-                program=eval_program,
-                max_ckpt_to_keep=1)
+                self._export_dir, exe, program=program, max_ckpt_to_keep=1)
             saver.save(state)
             self._best = eval_result
         else:
