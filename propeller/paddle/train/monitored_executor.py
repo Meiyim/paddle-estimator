@@ -20,6 +20,7 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 
 import os
+import sys
 import json
 from functools import reduce
 import six
@@ -218,7 +219,7 @@ try:
     from textone.training.base_trainer import BaseTrainer, ProgramSingle
     from textone.modules.ernie import ErnieModel, ErnieConfig
 
-    class TextoneSaver(Saver):
+    class TextoneSaver(Saver, BaseTrainer):
         def __init__(self,
                      save_dir,
                      exe,
@@ -226,46 +227,41 @@ try:
                      save_prefix='model',
                      max_ckpt_to_keep=None):
             """f"""
-            super(TextoneSaver, self).__init__(save_dir, exe, program,
-                                               save_prefix, max_ckpt_to_keep)
-
-            class _BaseTrainer(BaseTrainer):
-                def __init__(fakeself):
-                    fakeself.params = {
-                        'load_parameters': None,
-                        'load_checkpoint': None,
-                        'use_fp16': 0
-                    }
-                    fakeself.need_encrypt = True
-                    ProgramSingle.x = {
-                        'startup_program': self._program.startup_program,
-                        'train_program': self._program.train_program
-                    }
-                    fakeself.run_place = _get_one_place()
-                    fakeself.executor = self._exe
-                    fakeself.need_remove_tmp = True
-                    fakeself.model_class = None
-                    fakeself.is_fleet = False
-                    fakeself.version = "1.0.0"
-                    fakeself.init_auth()
-
-            self.bt = _BaseTrainer()
+            Saver.__init__(self, save_dir, exe, program, save_prefix,
+                           max_ckpt_to_keep)
+            self.params = {
+                'load_parameters': None,
+                'load_checkpoint': None,
+                'use_fp16': 0
+            }
+            self.need_encrypt = True
+            ProgramSingle.x = {
+                'startup_program': self._program.startup_program,
+                'train_program': self._program.train_program
+            }
+            self.run_place = _get_one_place()
+            self.executor = self._exe
+            self.need_remove_tmp = True
+            self.model_class = None
+            self.is_fleet = False
+            self.version = "1.0.0"
+            self.init_auth()
 
         def _load_pretrained(self, dir):
-            self.bt.params.update(load_parameters=dir, load_checkpoint=None)
+            self.params.update(load_parameters=dir, load_checkpoint=None)
             log.debug('loading param with texone')
-            self.bt.load_model_params('net_model')
+            self.load_model_params('net_model')
 
         def _load_program(self, dir, predicate_fn=None):
-            self.bt.params.update(load_checkpoint=dir, load_parameters=None)
+            self.params.update(load_checkpoint=dir, load_parameters=None)
             log.debug('loading ckpt with texone %s' % dir)
-            self.bt.load_model_params('net_model')
+            self.load_model_params('net_model')
 
         def _save_program(self, dir):
-            self.bt.params.update(load_checkpoint=dir, load_parameters=None)
+            self.params.update(load_checkpoint=dir, load_parameters=None)
             log.debug('saving ckpt with texone')
-            self.bt.save_checkpoint(self._exe, dir,
-                                    self._program.train_program, 0)
+            self.save_checkpoint(self._exe, dir, self._program.train_program,
+                                 0)
 
         def save(self, state):
             """doc"""
@@ -323,7 +319,8 @@ try:
 
 except ImportError:
     TextoneSaver = None
-    log.warning('textone not found! will not load encrepted model')
+    log.warning('textone not found in %r! will not load encrepted model' %
+                sys.path)
 
 
 class MonitoredExecutor(object):
