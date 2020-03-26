@@ -51,50 +51,63 @@ class RunState(object):
     """serializable Run state object"""
 
     @classmethod
+    def from_dict(cls, d):
+        d['step'] = 0
+        r = RunState()
+        r.__dict__ = d
+        return r
+
+    @classmethod
     def from_str(cls, s):
         """doc"""
         j = json.loads(s)
-        ret = RunState()
-        ret._gstep = j['global_step']
-        ret._time = j['time']
-        ret._step = 0
-        return ret
+        return cls.from_dict(j)
 
     def __init__(self):
         """doc"""
-        self._gstep = 0
-        self._step = 0
-        self._time = time()
+        self.__dict__ = {'gstep': 0, 'step': 0, 'time': time()}
 
     @property
     def gstep(self):
         """doc"""
-        return self._gstep
+        return self.__dict__['gstep']
 
     @property
     def step(self):
         """doc"""
-        return self._step
+        return self.__dict__['step']
+
+    def __setitem__(self, k, v):
+        self.__dict__[k] = v
+
+    def __getitem__(self, k):
+        return self.__dict__.get(k, None)
 
     @property
     def time(self):
         """doc"""
-        return self._time
+        return self.__dict__['time']
+
+    def state_dict(self):
+        return self.__dict__
 
     def __repr__(self):
         """doc"""
-        return repr({'global_step': self._gstep, 'time': self._time})
+        return repr(self.state_dict())
 
     def serialize(self):
         """doc"""
-        return json.dumps({'global_step': self._gstep, 'time': self._time})
+        return json.dumps(self.state_dict())
 
     def next(self):
         """doc"""
+        newd = dict(
+            self.__dict__,
+            gstep=self.gstep + 1,
+            step=self.step + 1,
+            time=time())
         ret = RunState()
-        ret._gstep = self._gstep + 1
-        ret._step = self._step + 1
-        ret._time = time()
+        ret.__dict__ = newd
         return ret
 
 

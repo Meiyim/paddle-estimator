@@ -64,6 +64,9 @@ class BestExporter(Exporter):
         """doc"""
         log.debug('New evaluate result: %s \nold: %s' %
                   (repr(eval_result), repr(self._best)))
+        if self._best is None and state['best_model'] is not None:
+            self._best = state['best_model']
+            log.debug('restoring best state %s' % repr(self._best))
         if self._best is None or self.cmp_fn(old=self._best, new=eval_result):
             log.debug('[Best Exporter]: export to %s' % self._export_dir)
             eval_program = program.train_program
@@ -73,6 +76,7 @@ class BestExporter(Exporter):
                 self._export_dir, exe, program=program, max_ckpt_to_keep=1)
             saver.save(state)
             self._best = eval_result
+            state['best_model'] = eval_result
         else:
             log.debug('[Best Exporter]: skip step %s' % state.gstep)
 
@@ -127,9 +131,12 @@ class BestInferenceModelExporter(Exporter):
         else:
             self.program = program
             self.model_spec = eval_model_spec
-
+        if self._best is None and state['best_inf_model'] is not None:
+            self._best = state['best_inf_model']
+            log.debug('restoring best state %s' % repr(self._best))
         log.debug('New evaluate result: %s \nold: %s' %
                   (repr(eval_result), repr(self._best)))
+
         if self._best is None or self.cmp_fn(old=self._best, new=eval_result):
             log.debug('[Best Exporter]: export to %s' % self._export_dir)
             if self.model_spec.inference_spec is None:
@@ -157,6 +164,7 @@ class BestInferenceModelExporter(Exporter):
                     fetch_var,
                     exe,
                     main_program=infer_program)
+            state['best_inf_model'] = eval_result
             self._best = eval_result
         else:
             log.debug('[Best Exporter]: skip step %s' % state.gstep)
