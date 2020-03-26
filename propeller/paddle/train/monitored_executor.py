@@ -219,7 +219,7 @@ try:
     from textone.training.base_trainer import BaseTrainer, ProgramSingle
     from textone.modules.ernie import ErnieModel, ErnieConfig
 
-    class TextoneSaver(Saver, BaseTrainer):
+    class TextoneTrainer(Saver, BaseTrainer):
         def __init__(self,
                      save_dir,
                      exe,
@@ -318,7 +318,7 @@ try:
             return state
 
 except ImportError:
-    TextoneSaver = None
+    TextoneTrainer = None
     log.warning('textone not found in %r! will not load encrepted model' %
                 sys.path)
 
@@ -406,7 +406,7 @@ class MonitoredExecutor(object):
                 else:
                     raise NotImplementedError()
             elif isinstance(self._warm_start_setting, TextoneWarmStartSetting):
-                if not type(self._saver) is TextoneSaver:
+                if not type(self._saver) is TextoneTrainer:
                     raise ValueError(
                         'try to warm start from textone pretrain dir, but textone not enabled'
                     )
