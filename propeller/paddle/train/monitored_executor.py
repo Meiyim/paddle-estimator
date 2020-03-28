@@ -70,7 +70,8 @@ class RunState(object):
     @property
     def gstep(self):
         """doc"""
-        return self.__dict__['gstep']
+        return self.__dict__.get(
+            'gstep', self.__dict__['global_step'])  # backward compatibility
 
     @property
     def step(self):
