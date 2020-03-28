@@ -30,6 +30,7 @@ import numpy as np
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
+from propeller.util import map_structure
 from propeller.paddle.train import Saver
 from propeller.types import InferenceSpec
 from propeller.train.model import Model
@@ -75,6 +76,7 @@ class BestExporter(Exporter):
             saver = Saver(
                 self._export_dir, exe, program=program, max_ckpt_to_keep=1)
             saver.save(state)
+            eval_result = map_structure(float, eval_result)
             self._best = eval_result
             state['best_model'] = eval_result
         else:
@@ -164,6 +166,7 @@ class BestInferenceModelExporter(Exporter):
                     fetch_var,
                     exe,
                     main_program=infer_program)
+            eval_result = map_structure(float, eval_result)
             state['best_inf_model'] = eval_result
             self._best = eval_result
         else:

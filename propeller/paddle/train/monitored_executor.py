@@ -71,7 +71,8 @@ class RunState(object):
     def gstep(self):
         """doc"""
         return self.__dict__.get(
-            'gstep', self.__dict__['global_step'])  # backward compatibility
+            'gstep',
+            self.__dict__.get('global_step'))  # backward compatibility
 
     @property
     def step(self):
