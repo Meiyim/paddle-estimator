@@ -178,8 +178,10 @@ class Saver(object):
 
         meta_file = os.path.join(path, 'meta')
         if not os.path.exists(meta_file):
-            raise RuntimeError('meta not found in restore dir: %s' % path)
-        state = RunState.from_str(open(meta_file).read())
+            log.warn('meta not found in restore dir: %s' % path)
+            state = RunState()
+        else:
+            state = RunState.from_str(open(meta_file).read())
         log.info('restore from ckpt %s, ckpt-status: %s' % (path, repr(state)))
 
         def _fn(v):
@@ -270,7 +272,8 @@ class MonitoredExecutor(object):
             F.Executor(_get_one_place()),
             program=self._program.train_program,
             max_ckpt_to_keep=self._max_ckpt)
-        if self._saver.last_ckpt is not None:
+        if self._saver.last_ckpt is not None or isinstance(ckpt,
+                                                           six.string_types):
             self._state = self._saver.restore(ckpt)
 
     def _freeze(self):

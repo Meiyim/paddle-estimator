@@ -237,6 +237,24 @@ class Auc(Metrics):
         return auc
 
 
+class BestAcc(Auc):
+    """doc"""
+
+    def eval(self):
+        """doc"""
+        thres = np.unique(self.pred_saver)
+        best_thre = -1
+        best_acc = -1
+        for thre in thres:
+            acc = 1. * np.sum(
+                (self.pred_saver > thre
+                 ) == self.label_saver.astype(np.bool)) / len(self.pred_saver)
+            if acc > best_acc:
+                best_thre = thre
+                best_acc = acc
+        return best_acc
+
+
 class RecallAtPrecision(Auc):
     """doc"""
 

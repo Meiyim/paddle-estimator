@@ -238,8 +238,8 @@ class Learner(object):
                 summary_record=summary_record,
                 summary_writer=_get_summary_writer(
                     os.path.join(self.run_config.model_dir, 'train_history')),
-                per_step=self.run_config.log_steps,
-                skip_step=self.run_config.skip_steps),
+                per_step=self.run_config.log_steps)
+            #skip_step=self.run_config.skip_steps),
         ]
         if model_spec.train_hooks is not None:
             train_run_hooks.extend(model_spec.train_hooks)
@@ -261,9 +261,8 @@ class Learner(object):
         if distribution.status.is_master:
             mon_exe._hooks.append(
                 hooks.CheckpointSaverHook(
-                    mon_exe._saver,
-                    per_step=mon_exe._save_steps,
-                    skip_step=mon_exe._skip_steps))
+                    mon_exe._saver, per_step=mon_exe._save_steps))
+            #skip_step=mon_exe._skip_steps))
 
         try:
             with mon_exe:
@@ -455,7 +454,7 @@ def train_and_eval(_placeholder=None,
 
         def after_run(self, _, state):
             """doc"""
-            if state.step > run_config.skip_steps and state.gstep % run_config.eval_steps == 0:
+            if state.gstep > run_config.skip_steps and state.gstep % run_config.eval_steps == 0:
                 eval_results = {}
                 for name, ds in six.iteritems(eval_dataset):
                     ehooks = [
