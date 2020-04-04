@@ -32,10 +32,10 @@ def enable_textone():
         raise
     global textone_enabled
     log.info('textone enabled')
-    from propeller.paddle.train.monitored_executor import MonitoredExecutor, TextoneSaver
-    if TextoneSaver is None:
+    from propeller.paddle.train.monitored_executor import MonitoredExecutor, TextoneTrainer
+    if TextoneTrainer is None:
         raise RuntimeError('enable textone failed: textone not found!')
-    MonitoredExecutor.saver_class = TextoneSaver
+    MonitoredExecutor.saver_class = TextoneTrainer
 
 
 from propeller.types import *
