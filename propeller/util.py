@@ -92,10 +92,11 @@ def parse_hparam(args=None):
         for hp in hparam_strs
     ]
     hparams = [HParams(**h) for h in hparams if h is not None]
-    if len(hparams) is None:
-        raise ValueError('hparam not found')
-    hparam = reduce(lambda x, y: x.join(y), hparams)
-    return hparam
+    if len(hparams) == 0:
+        return HParams()
+    else:
+        hparam = reduce(lambda x, y: x.join(y), hparams)
+        return hparam
 
 
 def flatten(s):

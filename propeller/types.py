@@ -81,7 +81,8 @@ class HParams(object):
     def join(self, other):
         """doc"""
         if not isinstance(other, HParams):
-            raise ValueError('input must be HParams instance.')
+            raise ValueError('input must be HParams instance. got %s' %
+                             type(other))
         self.__dict__.update(**other.__dict__)
         return self
 
