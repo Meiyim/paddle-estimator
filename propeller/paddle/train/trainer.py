@@ -89,7 +89,7 @@ def _build_net(model_fn, features, mode, params, run_config):
         if not (model_spec.loss.shape == () or model_spec.loss.shape == (1, )):
             raise ValueError('expect scarlar loss, got %s' %
                              repr(model_spec.loss.shape))
-        model_spec.loss.persistable = True
+        #model_spec.loss.persistable = True
     elif mode == RunMode.EVAL:
         if not isinstance(model_spec.metrics, dict):
             raise ValueError('model_spec.metrics should be dict, got %s' %
@@ -194,7 +194,7 @@ class Learner(object):
                 model_spec = _build_net(self.model_fn, fea, RunMode.EVAL,
                                         self.params, self.run_config)
                 log.info('Done')
-        program = program.clone(for_test=True)
+        #program = program.clone(for_test=True)
         log.info(
             'Eval with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
             % (repr(self.run_config), repr(self.params), repr(model_spec)))
@@ -214,7 +214,7 @@ class Learner(object):
                                         self.params, self.run_config)
                 log.info('Done')
 
-        program = program.clone(for_test=True)
+        #program = program.clone(for_test=True)
 
         log.info(
             'Predict with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'

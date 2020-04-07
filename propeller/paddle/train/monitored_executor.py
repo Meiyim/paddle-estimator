@@ -230,6 +230,24 @@ class Saver(object):
         return state
 
 
+class SaverV2(Saver):
+    def _save_program(self, dir):
+        save_path = os.path.join(dir, 'ckpt')
+        F.save(self._program.train_program, save_path)
+
+    def _load_program(self, dir, predicate_fn=None):
+        try:
+            save_path = os.path.join(dir, 'ckpt')
+            F.load(
+                self._program.train_program,
+                save_path, )
+        except F.core.EnforceNotMet as e:
+            log.exception(e)
+            raise RuntimeError(
+                'can not load model from %s, is this a textone checkpoint?' %
+                dir)
+
+
 try:
     from textone.training.base_trainer import BaseTrainer, ProgramSingle
     from textone.modules.ernie import ErnieModel, ErnieConfig
@@ -340,7 +358,7 @@ except ImportError:
 
 class MonitoredExecutor(object):
     """An Executor wrapper handling the train loop"""
-    saver_class = Saver  # will change if textone enabled
+    saver_class = SaverV2  # will change if textone enabled
 
     def __init__(
             self,
@@ -404,7 +422,8 @@ class MonitoredExecutor(object):
                 log.info("warm start from %s" %
                          self._warm_start_setting.from_dir)
                 log.info(self._saver)
-                if not type(self._saver) is Saver:
+                if (not type(self._saver) is Saver) and (
+                        not type(self._saver) is SaverV2):
                     raise ValueError(
                         'try to warm start from standart dir, but textone enabled'
                     )
@@ -416,8 +435,17 @@ class MonitoredExecutor(object):
                             log.info('warm start: %s' % v.name)
                         return ret
 
-                    self._saver._load_program(
-                        self._warm_start_setting.from_dir, predicate_fn=_fn)
+                    try:
+                        F.io.load_vars(
+                            self._exe,
+                            self._warm_start_setting.from_dir,
+                            main_program=self._program.train_program,
+                            predicate=_fn)
+                    except F.core.EnforceNotMet as e:
+                        log.exception(e)
+                        raise RuntimeError(
+                            'can not load model from %s, is this a textone checkpoint?'
+                            % dir)
                 else:
                     raise NotImplementedError()
             elif isinstance(self._warm_start_setting, TextoneWarmStartSetting):

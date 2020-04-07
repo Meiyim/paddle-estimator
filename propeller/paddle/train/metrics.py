@@ -69,7 +69,6 @@ class Mean(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.t.persistable = True
         return self.t,
 
     def update(self, args):
@@ -102,7 +101,6 @@ class Acc(Mean):
     @property
     def tensor(self):
         """doc"""
-        self.eq.persistable = True
         return self.eq,
 
 
@@ -118,7 +116,6 @@ class MSE(Mean):
     @property
     def tensor(self):
         """doc"""
-        self.mse.persistable = True
         return self.mse,
 
 
@@ -133,7 +130,6 @@ class Cosine(Mean):
     @property
     def tensor(self):
         """doc"""
-        self.cos.persistable = True
         return self.cos,
 
 
@@ -154,8 +150,6 @@ class MacroF1(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.label.persistable = True
-        self.pred.persistable = True
         return self.label, self.pred
 
     def update(self, args):
@@ -193,8 +187,6 @@ class Precision(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.label.persistable = True
-        self.pred.persistable = True
         return self.label, self.pred
 
     def update(self, args):
@@ -265,8 +257,6 @@ class Auc(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.pred.persistable = True
-        self.label.persistable = True
         return [self.pred, self.label]
 
     def update(self, args):
@@ -363,9 +353,6 @@ class Mrr(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.qid.persistable = True
-        self.label.persistable = True
-        self.pred.persistable = True
         return [self.qid, self.label, self.pred]
 
     def update(self, args):
@@ -477,9 +464,6 @@ class ChunkF1(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.pred.persistable = True
-        self.label.persistable = True
-        self.seqlen.persistable = True
         return [self.pred, self.label, self.seqlen]
 
     def update(self, args):
@@ -555,9 +539,6 @@ class PNRatio(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.qid.persistable = True
-        self.label.persistable = True
-        self.pred.persistable = True
         return [self.qid, self.label, self.pred]
 
     def update(self, args):
@@ -648,9 +629,6 @@ class PrecisionAtK(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.qid.persistable = True
-        self.label.persistable = True
-        self.pred.persistable = True
         return [self.qid, self.label, self.pred]
 
     def update(self, args):
