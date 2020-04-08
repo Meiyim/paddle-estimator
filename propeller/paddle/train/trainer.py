@@ -151,26 +151,24 @@ class Learner(object):
         train_program = F.Program()
         startup_prog = F.Program()
         with F.program_guard(train_program, startup_prog):
-            with F.unique_name.guard():
-                with collection.Collections() as collections:
-                    log.info('Building Train Graph...')
-                    fea = train_dataset.features()
-                    model_spec = _build_net(self.model_fn, fea, RunMode.TRAIN,
-                                            self.params, self.run_config)
-                    log.info('Building Train Graph: Done')
+            with collection.Collections() as collections:
+                log.info('Building Train Graph...')
+                fea = train_dataset.features()
+                model_spec = _build_net(self.model_fn, fea, RunMode.TRAIN,
+                                        self.params, self.run_config)
+                log.info('Building Train Graph: Done')
 
-                scalars = collections.get(collection.Key.SUMMARY_SCALAR)
-                histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
-                skip_optimize_ops = collections.get(
-                    collection.Key.SKIP_OPTIMIZE)
-                skip_opt = set()
-                if skip_optimize_ops is not None:
-                    skip_opt |= set(skip_optimize_ops)
-                if scalars is not None:
-                    skip_opt |= {t for _, t in scalars}
-                if histograms is not None:
-                    skip_opt |= {t for _, t in histograms}
-                skip_opt = list(skip_opt)
+            scalars = collections.get(collection.Key.SUMMARY_SCALAR)
+            histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
+            skip_optimize_ops = collections.get(collection.Key.SKIP_OPTIMIZE)
+            skip_opt = set()
+            if skip_optimize_ops is not None:
+                skip_opt |= set(skip_optimize_ops)
+            if scalars is not None:
+                skip_opt |= {t for _, t in scalars}
+            if histograms is not None:
+                skip_opt |= {t for _, t in histograms}
+            skip_opt = list(skip_opt)
         log.info(
             'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
             % (repr(self.run_config), repr(self.params), repr(model_spec)))
@@ -188,12 +186,11 @@ class Learner(object):
         startup_prog = F.Program()
         with F.program_guard(program, startup_prog):
             #share var with Train net
-            with F.unique_name.guard():
-                log.info('Building Eval Graph')
-                fea = ds.features()
-                model_spec = _build_net(self.model_fn, fea, RunMode.EVAL,
-                                        self.params, self.run_config)
-                log.info('Done')
+            log.info('Building Eval Graph')
+            fea = ds.features()
+            model_spec = _build_net(self.model_fn, fea, RunMode.EVAL,
+                                    self.params, self.run_config)
+            log.info('Done')
         #program = program.clone(for_test=True)
         log.info(
             'Eval with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
@@ -207,12 +204,11 @@ class Learner(object):
         startup_prog = F.Program()
         with F.program_guard(program, startup_prog):
             #share var with Train net
-            with F.unique_name.guard():
-                log.info('Building Predict Graph')
-                fea = ds.features()
-                model_spec = _build_net(self.model_fn, fea, RunMode.PREDICT,
-                                        self.params, self.run_config)
-                log.info('Done')
+            log.info('Building Predict Graph')
+            fea = ds.features()
+            model_spec = _build_net(self.model_fn, fea, RunMode.PREDICT,
+                                    self.params, self.run_config)
+            log.info('Done')
 
         #program = program.clone(for_test=True)
 
