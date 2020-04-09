@@ -137,6 +137,45 @@ class Cosine(Mean):
         return self.cos,
 
 
+class MacroF1(Metrics):
+    """doc"""
+
+    def __init__(self, label, pred):
+        """doc"""
+        self.label = label
+        self.pred = pred
+        self.reset()
+
+    def reset(self):
+        """doc"""
+        self.label_saver = np.array([], dtype=np.bool)
+        self.pred_saver = np.array([], dtype=np.bool)
+
+    @property
+    def tensor(self):
+        """doc"""
+        self.label.persistable = True
+        self.pred.persistable = True
+        return self.label, self.pred
+
+    def update(self, args):
+        """doc"""
+        label, pred = args
+        label = label.reshape([-1]).astype(np.bool)
+        pred = pred.reshape([-1]).astype(np.bool)
+        if label.shape != pred.shape:
+            raise ValueError(
+                'Metrics precesion: input not match: label:%s pred:%s' %
+                (label, pred))
+        self.label_saver = np.concatenate([self.label_saver, label])
+        self.pred_saver = np.concatenate([self.pred_saver, pred])
+
+    def eval(self):
+        """doc"""
+        return sklearn.metrics.f1_score(
+            self.label_saver, self.pred_saver, average='macro')
+
+
 class Precision(Metrics):
     """doc"""
 

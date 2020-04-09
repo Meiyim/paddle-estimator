@@ -23,7 +23,6 @@ from six.moves import zip, map
 import itertools
 import gzip
 from functools import partial
-import multiprocessing
 import six
 import logging
 
@@ -34,12 +33,13 @@ from propeller.paddle.train import distribution
 from propeller.data.functional import _interleave_func
 from propeller.paddle.data.functional import Dataset
 from propeller.paddle.data import example_pb2, feature_pb2
+import multiprocessing
 
 log = logging.getLogger(__name__)
 
 __all__ = [
     'FeatureColumns', 'TextColumn', 'TextIDColumn', 'LabelColumn',
-    'basic_tokenizer', 'Column'
+    'RawBytesColumn', 'basic_tokenizer', 'Column'
 ]
 
 
@@ -162,7 +162,10 @@ class TextColumn(Column):
 
     def raw_to_proto(self, raw):
         """doc"""
-        ids = [self.vocab.get(s, self.unk_id) for s in self.tokenizer(raw)]
+        ids = [
+            s if isinstance(s, int) else self.vocab.get(s, self.unk_id)
+            for s in self.tokenizer(raw)
+        ]
         fe = feature_pb2.Feature(int64_list=feature_pb2.Int64List(value=ids))
         return fe
 
@@ -173,8 +176,41 @@ class TextColumn(Column):
 
     def raw_to_instance(self, raw):
         """doc"""
-        ids = [self.vocab.get(s, self.unk_id) for s in self.tokenizer(raw)]
+        ids = [
+            s if isinstance(s, int) else self.vocab.get(s, self.unk_id)
+            for s in self.tokenizer(raw)
+        ]
         return np.array(ids, dtype=np.int64)
+
+
+class RawBytesColumn(Column):
+    def __init__(self, name):
+        self.name = name
+
+    @property
+    def output_shapes(self):
+        """doc"""
+        return [-1]
+
+    @property
+    def output_types(self):
+        """doc"""
+        return 'bytes'
+
+    def raw_to_proto(self, raw):
+        """doc"""
+        fe = feature_pb2.Feature(bytes_list=BytesList(value=[raw]))
+        return fe
+
+    def proto_to_instance(self, feature):
+        """doc"""
+        ret = feature.bytes_list.value[
+            0]  #np.array(feature.int64_list.value, dtype=np.int64)
+        return ret
+
+    def raw_to_instance(self, raw):
+        """doc"""
+        return raw
 
 
 class TextIDColumn(Column):
@@ -240,7 +276,8 @@ class FeatureColumns(object):
                 args = [(os.path.join(raw_dir, f), os.path.join(gz_dir, f),
                          self._columns, b'\t') for f in raw_file]
                 pool.map(_make_gz, args)
-                pool.terminate()
+                pool.close()
+                pool.join()
             else:
                 assert len(
                     os.listdir(gz_dir)

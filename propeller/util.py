@@ -51,10 +51,13 @@ def _get_dict_from_environ_or_json_or_file(args, env_name):
             s = open(s).read()
     if isinstance(s, six.string_types):
         try:
-            r = eval(s)
-        except SyntaxError as e:
-            raise ValueError('json parse error: %s \n>Got json: %s' %
-                             (repr(e), s))
+            r = json.loads(s)
+        except ValueError:
+            try:
+                r = eval(s)
+            except SyntaxError as e:
+                raise ValueError('json parse error: %s \n>Got json: %s' %
+                                 (repr(e), s))
         return r
     else:
         return s  #None
