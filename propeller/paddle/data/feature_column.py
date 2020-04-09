@@ -23,7 +23,6 @@ from six.moves import zip, map
 import itertools
 import gzip
 from functools import partial
-import multiprocessing
 import six
 import logging
 
@@ -34,6 +33,7 @@ from propeller.paddle.train import distribution
 from propeller.data.functional import _interleave_func
 from propeller.paddle.data.functional import Dataset
 from propeller.paddle.data import example_pb2, feature_pb2
+import multiprocessing
 
 log = logging.getLogger(__name__)
 
@@ -276,7 +276,8 @@ class FeatureColumns(object):
                 args = [(os.path.join(raw_dir, f), os.path.join(gz_dir, f),
                          self._columns, b'\t') for f in raw_file]
                 pool.map(_make_gz, args)
-                pool.terminate()
+                pool.close()
+                pool.join()
             else:
                 assert len(
                     os.listdir(gz_dir)
