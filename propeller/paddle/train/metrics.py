@@ -95,6 +95,10 @@ class Acc(Mean):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
         self.eq = L.equal(pred, label)
         self.reset()
 
@@ -109,6 +113,11 @@ class MSE(Mean):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         diff = pred - label
         self.mse = diff * diff
         self.reset()
@@ -124,6 +133,11 @@ class Cosine(Mean):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.cos = L.cos_sim(label, pred)
         self.reset()
 
@@ -138,6 +152,11 @@ class MacroF1(Metrics):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.label = label
         self.pred = pred
         self.reset()
@@ -175,6 +194,11 @@ class Precision(Metrics):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.label = label
         self.pred = pred
         self.reset()
@@ -245,6 +269,11 @@ class Auc(Metrics):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.pred = pred
         self.label = label
         self.reset()
@@ -339,6 +368,11 @@ class Mrr(Metrics):
 
     def __init__(self, qid, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.qid = qid
         self.label = label
         self.pred = pred
@@ -527,6 +561,11 @@ class PNRatio(Metrics):
 
     def __init__(self, qid, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.qid = qid
         self.label = label
         self.pred = pred
@@ -616,6 +655,11 @@ class PrecisionAtK(Metrics):
 
     def __init__(self, qid, label, pred, k=1):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.qid = qid
         self.label = label
         self.pred = pred
