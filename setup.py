@@ -34,7 +34,7 @@ if get_dist('paddlepaddle') is None and get_dist('paddlepaddle_gpu') is None:
 
 setup(
     name='paddle-propeller',
-    version='0.3dev1',
+    version='0.3.1dev1',
     description='high level paddle-paddle API',
     url='https://github.com/PaddlePaddle/ERNIE',
     author='Chen Xuyi',
