@@ -111,7 +111,11 @@ if __name__ == '__main__':
     parser.add_argument('file_or_dir', type=str)
     parser.add_argument('-t', "--to", type=str, default=None)
     parser.add_argument('-v', "--verbose", action='store_true')
+    parser.add_argument('--print_items', type=int, default=None)
     args = parser.parse_args()
+
+    if args.print_items is not None:
+        np.set_printoptions(edgeitems=args.print_items)
 
     files = list_dir(args.file_or_dir)
     parsed_arr = map(parse, files)

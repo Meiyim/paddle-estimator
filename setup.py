@@ -33,8 +33,8 @@ if get_dist('paddlepaddle') is None and get_dist('paddlepaddle_gpu') is None:
     install_deps.append('paddlepaddle')
 
 setup(
-    name='propeller',
-    version='0.1',
+    name='paddle-propeller',
+    version='0.3dev1',
     description='high level paddle-paddle API',
     url='https://github.com/PaddlePaddle/ERNIE',
     author='Chen Xuyi',

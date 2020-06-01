@@ -89,6 +89,7 @@ class HParams(object):
 SummaryRecord = namedtuple('SummaryRecord', ['scalar', 'histogram'])
 
 WarmStartSetting = namedtuple('WarmStartSetting', ['predicate_fn', 'from_dir'])
+TextoneWarmStartSetting = namedtuple('TextoneWarmStartSetting', ['from_dir'])
 
 RunConfig = namedtuple('RunConfig', [
     'model_dir', 'run_steps', 'max_steps', 'save_steps', 'eval_steps',
