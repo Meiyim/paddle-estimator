@@ -161,8 +161,6 @@ class TextColumn(Column):
 
     def raw_to_proto(self, raw):
         """doc"""
-        log.warn(repr(raw))
-        a
         ids = [
             s if isinstance(s, int) else self.vocab.get(s, self.unk_id)
             for s in self.tokenizer(raw)
