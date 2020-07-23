@@ -245,6 +245,12 @@ class BestAcc(Auc):
         thres = np.unique(self.pred_saver)
         best_thre = -1
         best_acc = -1
+
+        num = 10000
+        gap = len(thres) // num
+        if gap > 0:
+            thres = thres[::gap]
+
         for thre in thres:
             acc = 1. * np.sum(
                 (self.pred_saver > thre
@@ -540,7 +546,8 @@ class PNRatio(Metrics):
                             p += 1
                         elif p1 > p2:
                             n += 1
-        pn = p / n if n > 0 else 0.0
+        pn = 1. * p / n if n > 0 else 0.0
+        log.info("p: %s, n; %s." % (p, n))
         return np.float32(pn)
 
 

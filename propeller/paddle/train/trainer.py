@@ -296,7 +296,8 @@ class Learner(object):
             eval_executor,
             program,
             run_config=self.run_config,
-            run_hooks=eval_run_hooks)
+            run_hooks=eval_run_hooks,
+            warm_start_setting=self.warm_start_setting)
         mon_exe.init_or_restore_variables()
 
         try:
