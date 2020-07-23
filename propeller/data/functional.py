@@ -215,6 +215,20 @@ def _buffered_func(dataset, size):
     return _data_reader
 
 
+def _batch_func(dataset, batch_size):
+    def _gen():
+        iterable = dataset()
+        while True:
+            buf = list(itertools.islice(iterable, batch_size))
+            if not len(buf):
+                raise StopIteration
+            buf = list(zip(*buf))  # transpose
+            buf = [np.stack(b) for b in buf]
+            yield buf
+
+    return _gen
+
+
 def _padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
     if not isinstance(batch_size, int):
         raise ValueError('unknown batch_size: %s' % repr(batch_size))
@@ -442,6 +456,10 @@ class Dataset(object):
             map_fn=map_fn,
             cycle_length=cycle_length,
             block_length=block_length)
+        return self.apply(func)
+
+    def batch(self, batch_size):
+        func = functools.partial(_batch_func, batch_size=batch_size)
         return self.apply(func)
 
     def padded_batch(self, batch_size, pad_value=0, max_seqlen=None):

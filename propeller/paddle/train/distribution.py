@@ -52,7 +52,7 @@ class DistributionStatus(object):
                 idx = int(config['task']['index'])
                 self._this = cluster[task][idx]
 
-                self._env = cluster['chief'] + cluster['worker']
+                self._env = cluster['chief'] + cluster.get('worker', [])
                 if len(set(self._env)) != len(self._env):
                     raise ValueError('duplicate host in dis_config %s' %
                                      config)

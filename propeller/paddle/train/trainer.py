@@ -353,7 +353,8 @@ class Learner(object):
         mon_exe = MonitoredExecutor(
             executor,
             program,
-            run_config=pred_run_config, )
+            run_config=pred_run_config,
+            warm_start_setting=self.warm_start_setting, )
         mon_exe.init_or_restore_variables(ckpt
                                           if ckpt_path is None else ckpt_path)
         try:
