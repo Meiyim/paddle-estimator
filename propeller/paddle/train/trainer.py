@@ -65,7 +65,7 @@ def _log_eval_result(name, eval_result, swriter, state):
     log.debug(eval_result)
     printable = []
     for n, val in six.iteritems(eval_result):
-        assert val.shape == (), 'metrics eval use float'
+        #assert val.shape == (), 'metrics eval use float'
         printable.append('{}\t{}'.format(n, val))
         if swriter is not None:
             swriter.add_scalar(n, val, state.gstep)
