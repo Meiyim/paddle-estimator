@@ -239,6 +239,15 @@ class F1(Precision):
         return 2 * precision * recall / (precision + recall + 1.e-6)
 
 
+class MCC(Precision):
+    """mathew corelation coefitient"""
+
+    def eval(self):
+        """doc"""
+        return sklearn.metrics.matthews_corrcoef(self.label_saver,
+                                                 self.pred_saver)
+
+
 class Auc(Metrics):
     """doc"""
 
