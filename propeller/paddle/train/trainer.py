@@ -492,8 +492,8 @@ def train_and_eval(_placeholder=None,
                 eval_results = {}
             return eval_results
 
-        def after_train(self, _, _):
-            for _, w in six.iteritems(self.summary_writer):
+        def after_train(self, _, __):
+            for _, w in six.iteritems(self.summary_writers):
                 w.close()
 
     if distribution.status.is_master:
