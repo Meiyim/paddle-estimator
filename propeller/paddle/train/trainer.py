@@ -492,6 +492,10 @@ def train_and_eval(_placeholder=None,
                 eval_results = {}
             return eval_results
 
+        def after_train(self, _, _):
+            for _, w in six.iteritems(self.summary_writer):
+                w.close()
+
     if distribution.status.is_master:
         train_hooks.append(_EvalHookOnTrainLoop())
     res = est.train(train_dataset, train_hooks=train_hooks)
