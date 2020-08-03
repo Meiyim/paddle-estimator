@@ -236,16 +236,20 @@ class SaverV2(Saver):
         F.save(self._program.train_program, save_path)
 
     def _load_program(self, dir, predicate_fn=None):
-        try:
-            save_path = os.path.join(dir, 'ckpt')
-            F.load(
-                self._program.train_program,
-                save_path, )
-        except F.core.EnforceNotMet as e:
-            log.exception(e)
-            raise RuntimeError(
-                'can not load model from %s, is this a textone checkpoint?' %
-                dir)
+        save_path = os.path.join(dir, 'ckpt')
+        if not os.path.exists(save_path + '.pdparams'):
+            try:
+                log.warn('failed to load model, try old-styled saver')
+                super(SaverV2, self)._load_program(
+                    dir, predicate_fn=predicate_fn)
+            except F.core.EnforceNotMet as e:
+                log.exception(e)
+                raise RuntimeError(
+                    'can not load model from %s, is this a textone checkpoint?'
+                    % dir)
+        else:
+            sd = F.load_program_state(save_path)
+            F.set_program_state(self._program.train_program, sd)
 
 
 try:
@@ -421,7 +425,6 @@ class MonitoredExecutor(object):
             if isinstance(self._warm_start_setting, WarmStartSetting):
                 log.info("warm start from %s" %
                          self._warm_start_setting.from_dir)
-                log.info(self._saver)
                 if (not type(self._saver) is Saver) and (
                         not type(self._saver) is SaverV2):
                     raise ValueError(
@@ -435,17 +438,8 @@ class MonitoredExecutor(object):
                             log.info('warm start: %s' % v.name)
                         return ret
 
-                    try:
-                        F.io.load_vars(
-                            self._exe,
-                            self._warm_start_setting.from_dir,
-                            main_program=self._program.train_program,
-                            predicate=_fn)
-                    except F.core.EnforceNotMet as e:
-                        log.exception(e)
-                        raise RuntimeError(
-                            'can not load model from %s, is this a textone checkpoint?'
-                            % dir)
+                    self._saver._load_program(
+                        self._warm_start_setting.from_dir, predicate_fn=_fn)
                 else:
                     raise NotImplementedError()
             elif isinstance(self._warm_start_setting, TextoneWarmStartSetting):
