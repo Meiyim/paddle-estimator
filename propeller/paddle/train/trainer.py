@@ -66,16 +66,13 @@ def _log_eval_result(name, eval_result, swriter, state):
     printable = []
     for n, val in six.iteritems(eval_result):
         #assert val.shape == (), 'metrics eval use float'
-        printable.append('{}\t{}'.format(n, val))
+        printable.append('{}:{}'.format(n, val))
         if swriter is not None:
             swriter.add_scalar(n, val, state.gstep)
             log.debug('write to tensorboard %s' % swriter.logdir)
 
-    if len(printable):
-        log.info('*** eval res: %10s ***' % name)
-        for p in printable:
-            log.info(p)
-        log.info('******************************')
+    if printable:
+        log.info('[Eval:%s]:' % name + '\t'.join(printable))
 
 
 def _build_net(model_fn, features, mode, params, run_config):
@@ -235,6 +232,7 @@ class Learner(object):
                 summary_writer=_get_summary_writer(
                     os.path.join(self.run_config.model_dir, 'train_history')),
                 per_step=self.run_config.log_steps,
+                prefix=self.run_config.log_prefix or 'training',
                 skip_step=self.run_config.skip_steps),
         ]
         if model_spec.train_hooks is not None:

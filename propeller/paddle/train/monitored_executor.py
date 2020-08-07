@@ -465,10 +465,10 @@ class MonitoredExecutor(object):
         will do nothing if loss is None i.e. not in train mode
         """
         if self._loss is None:
-            log.debug('will not freeze a program without loss')
+            #log.debug('will not freeze a program without loss')
             return
         if isinstance(self._program.train_program, F.compiler.CompiledProgram):
-            log.debug('program has already been built')
+            #log.debug('program has already been built')
             return
         exec_strategy = F.ExecutionStrategy()
         exec_strategy.num_threads = 4  #2 for fp32 4 for fp16
