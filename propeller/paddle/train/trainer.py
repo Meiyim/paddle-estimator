@@ -355,8 +355,12 @@ class Learner(object):
             program,
             run_config=pred_run_config,
             warm_start_setting=self.warm_start_setting, )
-        mon_exe.init_or_restore_variables(ckpt
-                                          if ckpt_path is None else ckpt_path)
+        mon_exe.init_or_restore_variables(ckpt)
+        if ckpt_path is not None:
+            if not os.path.exists(ckpt_path):
+                raise RuntimeError('ckpt path not found: %s' % ckpt_path)
+            log.info('Loading ckpt path for prediction: %s' % ckpt_path)
+            mon_exe._saver._load_program(ckpt_path)
         try:
             with mon_exe:
                 log.info('Runining predict from dir: %s' % repr(mon_exe.state))
