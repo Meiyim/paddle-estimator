@@ -65,7 +65,7 @@ def _log_eval_result(name, eval_result, swriter, state):
     log.debug(eval_result)
     printable = []
     for n, val in six.iteritems(eval_result):
-        assert val.shape == (), 'metrics eval use float'
+        #assert val.shape == (), 'metrics eval use float'
         printable.append('{}\t{}'.format(n, val))
         if swriter is not None:
             swriter.add_scalar(n, val, state.gstep)
@@ -495,6 +495,10 @@ def train_and_eval(_placeholder=None,
             else:
                 eval_results = {}
             return eval_results
+
+        def after_train(self, _, __):
+            for _, w in six.iteritems(self.summary_writers):
+                w.close()
 
     if distribution.status.is_master:
         train_hooks.append(_EvalHookOnTrainLoop())

@@ -492,7 +492,7 @@ class MonitoredExecutor(object):
         self.result = None
         for h in self._hooks:
             log.debug('train loop has hook %s' % h)
-            h.before_train(self._program)
+            h.before_train(self._program, self._state)
         return self
 
     def run(self, fetch_list=[], *args, **kwargs):
@@ -548,7 +548,8 @@ class MonitoredExecutor(object):
                 log.info('********** Stop Loop ************')
                 self.result = []
                 for h in self._hooks:
-                    self.result.append(h.after_train())
+                    self.result.append(
+                        h.after_train(self._program, self._state))
             except Exception as e:
                 log.exception('error occur after loop %s' % repr(e))
         else:
