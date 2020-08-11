@@ -222,10 +222,8 @@ class Saver(object):
 
         meta_file = os.path.join(path, 'meta')
         if not os.path.exists(meta_file):
-            log.warn('meta not found in restore dir: %s' % path)
-            state = RunState()
-        else:
-            state = RunState.from_str(open(meta_file).read())
+            raise RuntimeError('meta not found in restore dir: %s' % path)
+        state = RunState.from_str(open(meta_file).read())
         log.info('restore from ckpt %s, ckpt-status: %s' % (path, repr(state)))
 
         self._load_program(path)

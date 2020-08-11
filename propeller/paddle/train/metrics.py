@@ -595,7 +595,6 @@ class PNRatio(Metrics):
                         elif p1 > p2:
                             n += 1
         pn = 1. * p / n if n > 0 else 0.0
-        log.info("p: %s, n; %s." % (p, n))
         return np.float32(pn)
 
 

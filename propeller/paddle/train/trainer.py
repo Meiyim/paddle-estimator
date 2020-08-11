@@ -239,7 +239,7 @@ class Learner(object):
                 summary_writer=_get_summary_writer(
                     os.path.join(self.run_config.model_dir, 'train_history')),
                 per_step=self.run_config.log_steps,
-                skip_step=0)
+                skip_step=self.run_config.skip_steps),
         ]
         if model_spec.train_hooks is not None:
             train_run_hooks.extend(model_spec.train_hooks)
@@ -261,8 +261,9 @@ class Learner(object):
         if distribution.status.is_master:
             mon_exe._hooks.append(
                 hooks.CheckpointSaverHook(
-                    mon_exe._saver, per_step=mon_exe._save_steps, skip_step=0))
-            #skip_step=mon_exe._skip_steps))
+                    mon_exe._saver,
+                    per_step=mon_exe._save_steps,
+                    skip_step=mon_exe._skip_steps, ))
 
         try:
             with mon_exe:
