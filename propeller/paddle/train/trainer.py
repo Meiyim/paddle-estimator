@@ -263,7 +263,7 @@ class Learner(object):
                 hooks.CheckpointSaverHook(
                     mon_exe._saver,
                     per_step=mon_exe._save_steps,
-                    skip_step=mon_exe._skip_steps))
+                    skip_step=mon_exe._skip_steps, ))
 
         try:
             with mon_exe:
@@ -297,7 +297,8 @@ class Learner(object):
             eval_executor,
             program,
             run_config=self.run_config,
-            run_hooks=eval_run_hooks)
+            run_hooks=eval_run_hooks,
+            warm_start_setting=self.warm_start_setting)
         mon_exe.init_or_restore_variables()
 
         try:
@@ -355,8 +356,12 @@ class Learner(object):
             program,
             run_config=pred_run_config,
             warm_start_setting=self.warm_start_setting, )
-        mon_exe.init_or_restore_variables(ckpt
-                                          if ckpt_path is None else ckpt_path)
+        mon_exe.init_or_restore_variables(ckpt)
+        if ckpt_path is not None:
+            if not os.path.exists(ckpt_path):
+                raise RuntimeError('ckpt path not found: %s' % ckpt_path)
+            log.info('Loading ckpt path for prediction: %s' % ckpt_path)
+            mon_exe._saver._load_program(ckpt_path)
         try:
             with mon_exe:
                 log.info('Runining predict from dir: %s' % repr(mon_exe.state))
@@ -456,7 +461,7 @@ def train_and_eval(_placeholder=None,
 
         def after_run(self, _, state):
             """doc"""
-            if state.step > run_config.skip_steps and state.gstep % run_config.eval_steps == 0:
+            if state.gstep > run_config.skip_steps and state.gstep % run_config.eval_steps == 0:
                 eval_results = {}
                 for name, ds in six.iteritems(eval_dataset):
                     ehooks = [

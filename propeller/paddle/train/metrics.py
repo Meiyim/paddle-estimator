@@ -285,6 +285,30 @@ class Auc(Metrics):
         return auc
 
 
+class BestAcc(Auc):
+    """doc"""
+
+    def eval(self):
+        """doc"""
+        thres = np.unique(self.pred_saver)
+        best_thre = -1
+        best_acc = -1
+
+        num = 10000
+        gap = len(thres) // num
+        if gap > 0:
+            thres = thres[::gap]
+
+        for thre in thres:
+            acc = 1. * np.sum(
+                (self.pred_saver > thre
+                 ) == self.label_saver.astype(np.bool)) / len(self.pred_saver)
+            if acc > best_acc:
+                best_thre = thre
+                best_acc = acc
+        return best_acc
+
+
 class RecallAtPrecision(Auc):
     """doc"""
 
@@ -570,7 +594,7 @@ class PNRatio(Metrics):
                             p += 1
                         elif p1 > p2:
                             n += 1
-        pn = p / n if n > 0 else 0.0
+        pn = 1. * p / n if n > 0 else 0.0
         return np.float32(pn)
 
 

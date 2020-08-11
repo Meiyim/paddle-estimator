@@ -274,8 +274,9 @@ class Dataset(object):
     @classmethod
     def from_generator_func(cls, _gen, data_shapes=None, data_types=None):
         """doc"""
-        if not inspect.isgeneratorfunction(_gen):
-            raise ValueError('expect generator function, got %s' % repr(_gen))
+
+        #if not inspect.isgeneratorfunction(_gen):
+        #raise ValueError('expect generator function, got %s' % repr(_gen))
 
         def _wrapper():  #compat to py3.7
             try:
