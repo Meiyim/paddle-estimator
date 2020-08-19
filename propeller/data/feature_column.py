@@ -297,13 +297,6 @@ class FeatureColumns(object):
         if repeat:
             dataset = dataset.repeat()
 
-        if shard:
-            from propeller.paddle.train import distribution
-            if distribution.status.mode == distribution.DistributionMode.NCCL:
-                log.info('Apply dataset sharding in distribution env')
-                train_ds = train_ds.shard(distribution.status.num_replica,
-                                          distribution.status.replica_id)
-
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(gz_files))
         fn = partial(
@@ -312,6 +305,18 @@ class FeatureColumns(object):
             cycle_length=len(gz_files),
             block_length=1)
         dataset = dataset.apply(fn)
+
+        if shard:
+            if not repeat:
+                raise ValueError(
+                    'sharding on a non repeat dataset, will cause data imbalance. '
+                )
+            from propeller.paddle.train import distribution
+            if distribution.status.mode == distribution.DistributionMode.NCCL:
+                log.info('Apply dataset sharding in distribution env')
+                dataset = dataset.shard(distribution.status.num_replica,
+                                        distribution.status.replica_id)
+
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
@@ -346,6 +351,18 @@ class FeatureColumns(object):
             cycle_length=len(data_files),
             block_length=1)
         dataset = dataset.apply(fn)
+
+        if shard:
+            if not repeat:
+                raise ValueError(
+                    'sharding on a non repeat dataset, will cause data imbalance. '
+                )
+            from propeller.paddle.train import distribution
+            if distribution.status.mode == distribution.DistributionMode.NCCL:
+                log.info('Apply dataset sharding in distribution env')
+                dataset = dataset.shard(distribution.status.num_replica,
+                                        distribution.status.replica_id)
+
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
