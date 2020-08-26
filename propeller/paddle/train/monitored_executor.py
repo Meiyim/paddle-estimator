@@ -477,6 +477,7 @@ class MonitoredExecutor(object):
 
         build_strategy = F.BuildStrategy()
         build_strategy.remove_unnecessary_lock = False
+        build_strategy.enable_sequential_execution = True  # prevent hang
         #build_strategy.fuse_broadcast_ops = True
         build_strategy.num_trainers = distribution.status.num_replica
         build_strategy.trainer_id = distribution.status.replica_id

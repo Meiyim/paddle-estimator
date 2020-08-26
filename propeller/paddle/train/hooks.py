@@ -235,6 +235,10 @@ class LoggingHook(RunHook):
                     map(lambda t: '%s:%s' % t, zip(self.s_name, s_np))),
             ]))
 
+    def after_train(self, program, state):
+        if self.writer is not None:
+            self.writer.close()
+
 
 class StopAtStepHook(RunHook):
     """stop training at some step"""
@@ -312,7 +316,6 @@ class EvalHook(RunHook):
 
     def after_train(self, program, state):
         """doc"""
-        printable = []
         self._result = {}
         for n, m in zip(self.names, self.metrics):
             val = m.eval()

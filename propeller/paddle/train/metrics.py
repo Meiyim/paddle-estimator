@@ -25,6 +25,8 @@ import paddle.fluid as F
 import paddle.fluid.layers as L
 import sklearn.metrics
 
+from propeller.paddle.train import distribution  #import allgather, status, DistributionMode
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -33,17 +35,28 @@ __all__ = [
 ]
 
 
+def _allgather_2dim(*args):
+    if distribution.status.mode == distribution.DistributionMode.LOCAL:
+        return args
+    for a in args:
+        if len(a.shape) > 2:
+            log.warn(
+                'Metrics:%s have shape %s, cannot not be allgathered, will return to single card evaluation'
+                % (a, a.shape))
+        else:
+            pass
+            #log.debug('broadcast %s' % a)
+    ret = [distribution.allgather(a) if len(a.shape) <= 2 else a for a in args]
+    return ret
+
+
 class Metrics(object):
     """Metrics base class"""
 
     def __init__(self):
         """doc"""
         self.saver = []
-
-    @property
-    def tensor(self):
-        """doc"""
-        pass
+        self.tensor = None
 
     def update(self, *args):
         """doc"""
@@ -59,7 +72,7 @@ class Mean(Metrics):
 
     def __init__(self, t):
         """doc"""
-        self.t = t
+        self.t = _allgather_2dim(t)
         self.reset()
 
     def reset(self):
@@ -69,7 +82,7 @@ class Mean(Metrics):
     @property
     def tensor(self):
         """doc"""
-        return self.t,
+        return self.t
 
     def update(self, args):
         """doc"""
@@ -79,6 +92,7 @@ class Mean(Metrics):
 
     def eval(self):
         """doc"""
+        log.debug(self.saver.shape)
         return self.saver.mean()
 
 
@@ -99,13 +113,13 @@ class Acc(Mean):
             raise ValueError(
                 'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
                 % (repr(label), repr(pred)))
-        self.eq = L.equal(pred, label)
+        self.eq = _allgather_2dim(L.cast(L.equal(pred, label), 'int64'))
         self.reset()
 
     @property
     def tensor(self):
         """doc"""
-        return self.eq,
+        return self.eq
 
 
 class MSE(Mean):
@@ -169,7 +183,7 @@ class MacroF1(Metrics):
     @property
     def tensor(self):
         """doc"""
-        return self.label, self.pred
+        return [self.label, self.pred]
 
     def update(self, args):
         """doc"""
@@ -202,16 +216,12 @@ class Precision(Metrics):
         self.label = label
         self.pred = pred
         self.reset()
+        self.tensor = _allgather_2dim(self.label, self.pred)
 
     def reset(self):
         """doc"""
         self.label_saver = np.array([], dtype=np.bool)
         self.pred_saver = np.array([], dtype=np.bool)
-
-    @property
-    def tensor(self):
-        """doc"""
-        return self.label, self.pred
 
     def update(self, args):
         """doc"""
@@ -262,6 +272,45 @@ class MCC(Precision):
         """doc"""
         return sklearn.metrics.matthews_corrcoef(self.label_saver,
                                                  self.pred_saver)
+
+
+class PCC(Metrics):
+    """pearson corelation coefitient"""
+
+    def __init__(self, label, pred):
+        """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
+        from scipy.stats import pearsonr
+        self.pearsonr = pearsonr
+        self.label = label
+        self.pred = pred
+        self.tensor = _allgather_2dim(self.label, self.pred)
+        self.reset()
+
+    def reset(self):
+        """doc"""
+        self.label_saver = np.array([], dtype=np.float)
+        self.pred_saver = np.array([], dtype=np.float)
+
+    def update(self, args):
+        """doc"""
+        label, pred = args
+        label = label.reshape([-1]).astype(np.float)
+        pred = pred.reshape([-1]).astype(np.float)
+        if label.shape != pred.shape:
+            raise ValueError('input not match: label:%s pred:%s' %
+                             (label, pred))
+        self.label_saver = np.concatenate([self.label_saver, label])
+        self.pred_saver = np.concatenate([self.pred_saver, pred])
+
+    def eval(self):
+        """doc"""
+        p, _ = self.pearsonr(self.label_saver, self.pred_saver)
+        return p
 
 
 class Auc(Metrics):

@@ -79,14 +79,16 @@ def _build_net(model_fn, features, mode, params, run_config):
     model_spec = model_fn(
         features=features, mode=mode, params=params, run_config=run_config)
 
-    if mode == RunMode.TRAIN:
+    if mode == RunMode.TRAIN or mode == RunMode.EVAL:
         if not isinstance(model_spec.loss, F.framework.Variable):
             raise ValueError('model_spec.metrics should be Variable, got %s' %
                              repr(model_spec.loss))
         if not (model_spec.loss.shape == () or model_spec.loss.shape == (1, )):
             raise ValueError('expect scarlar loss, got %s' %
                              repr(model_spec.loss.shape))
-        #model_spec.loss.persistable = True
+
+    if mode == RunMode.TRAIN:
+        pass
     elif mode == RunMode.EVAL:
         if not isinstance(model_spec.metrics, dict):
             raise ValueError('model_spec.metrics should be dict, got %s' %
@@ -189,6 +191,17 @@ class Learner(object):
                                     self.params, self.run_config)
             log.info('Done')
         #program = program.clone(for_test=True)
+        # program check
+        optimizer_ops = {'sgd', 'adam', 'adagrad'}
+        for op in program.global_block().ops:
+            if op.type == 'dropout':
+                op._set_attr('is_test', True)
+            if op.type == 'batch_norm':
+                op._set_attr('is_test', True)
+            if op.type in optimizer_ops:
+                raise RuntimeError('Found optimizer op in eval graph, op: %s' %
+                                   repr(op))
+
         log.info(
             'Eval with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
             % (repr(self.run_config), repr(self.params), repr(model_spec)))
@@ -290,14 +303,17 @@ class Learner(object):
         mon_exe = MonitoredExecutor(
             eval_executor,
             program,
+            loss=model_spec.loss,
             run_config=self.run_config,
             run_hooks=eval_run_hooks,
             warm_start_setting=self.warm_start_setting)
+        distribution.init_distribuition_env(
+            program)  #only initialize distribute training with 
         mon_exe.init_or_restore_variables()
 
         try:
             with mon_exe:
-                for data in eval_dataset.start(places=[single_card_place]):
+                for data in eval_dataset.start():
                     mon_exe.run(feed=data)
         except (StopException, F.core.EOFException) as e:
             pass
@@ -308,7 +324,7 @@ class Learner(object):
             os.path.join(self.run_config.model_dir, 'eval_history'))
         _log_eval_result('eval', eval_result, summary_writer, mon_exe.state)
 
-        return mon_exe.result
+        return eval_result
 
     def predict(self,
                 predict_dataset,
@@ -484,19 +500,21 @@ def train_and_eval(_placeholder=None,
                     eval_results[name] = eval_res
                     _log_eval_result(name, eval_res,
                                      self.summary_writers[name], state)
-                for exporter in exporters:
-                    exporter.export(eval_executor, self.program,
-                                    self.model_spec, eval_results, state)
+
+                if distribution.status.is_master:
+                    for exporter in exporters:
+                        exporter.export(eval_executor, self.program,
+                                        self.model_spec, eval_results, state)
             else:
                 eval_results = {}
             return eval_results
 
         def after_train(self, _, __):
             for _, w in six.iteritems(self.summary_writers):
-                w.close()
+                if w:
+                    w.close()
 
-    if distribution.status.is_master:
-        train_hooks.append(_EvalHookOnTrainLoop())
+    train_hooks.append(_EvalHookOnTrainLoop())
     res = est.train(train_dataset, train_hooks=train_hooks)
     return res
 
