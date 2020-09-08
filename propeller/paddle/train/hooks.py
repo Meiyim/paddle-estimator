@@ -45,7 +45,7 @@ class RunHook(object):
         """doc"""
         pass
 
-    def before_train(self, program):
+    def before_train(self, program, state):
         """doc"""
         pass
 
@@ -61,7 +61,7 @@ class RunHook(object):
         """doc"""
         return False
 
-    def after_train(self):
+    def after_train(self, program, state):
         """doc"""
         pass
 
@@ -163,7 +163,7 @@ class LoggingHook(RunHook):
         self.writer = summary_writer
         self.last_state = None
 
-    def before_train(self, program):
+    def before_train(self, program, _):
         """doc"""
         if self.summary_record:
             if self.summary_record.scalar:
@@ -274,7 +274,7 @@ class EvalHook(RunHook):
         else:
             self.names, self.metrics = [], []
 
-    def before_train(self, program):
+    def before_train(self, program, _):
         """doc"""
         for m in self.metrics:
             m.reset()
@@ -307,7 +307,7 @@ class EvalHook(RunHook):
         """doc"""
         return self._result
 
-    def after_train(self):
+    def after_train(self, program, state):
         """doc"""
         printable = []
         self._result = {}
@@ -332,3 +332,6 @@ class CheckpointSaverHook(RunHook):
         if state.gstep % self.per_step == 0 and \
                 state.step > self.skip_step:
             self.saver.save(state)
+
+    def after_train(self, program, state):
+        self.saver.save(state)
