@@ -205,11 +205,12 @@ class Saver(object):
 
         if self.save_tarckpt:
             now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
-            tar_name = save_dir + '_' + now + '.tar'
-            log.debug('taring %s to %s' % (save_dir, tar_name))
-            self.tarball(save_dir, tar_name)
-            save_name = tar_name
+            save_dir_tar = save_dir + '_' + now + '.tar'
+            tar_name = os.path.basename(save_dir_tar)
+            log.debug('taring %s to %s' % (save_dir, save_dir_tar))
+            self.tarball(save_dir, save_dir_tar)
             shutil.rmtree(save_dir)
+            save_name = tar_name
 
         self.ckpt_list.append(save_name)
         if len(self.ckpt_list) > self._max_ckpt_to_keep:
@@ -238,7 +239,7 @@ class Saver(object):
         else:
             raise ValueError('ckpt type not understood %s' % repr(ckpt))
 
-        if tarfile.is_tarfile(path):
+        if os.path.isfile(path) and tarfile.is_tarfile(path):
             log.info('restore from tar file : {}'.format(path))
             tf = tarfile.open(path)
             dirs = [m for m in tf.getmembers() if m.isdir()]
@@ -402,7 +403,9 @@ class MonitoredExecutor(object):
             self._skip_steps = run_config.skip_steps if run_config.skip_steps else 100
             self._save_prefix = 'model'
             self._max_ckpt = run_config.max_ckpt
-            self._save_tarckpt = run_config.save_tarckpt if hasattr(run_config, 'save_tarckpt') else False
+            self._save_tarckpt = False
+            if hasattr(run_config, 'save_tarckpt') and run_config.save_tarckpt is True:
+                self._save_tarckpt = True
 
     @property
     def state(self):
