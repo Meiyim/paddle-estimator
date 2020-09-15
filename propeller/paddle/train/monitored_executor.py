@@ -24,8 +24,11 @@ import sys
 import json
 from functools import reduce
 import six
-from time import time
+#from time import time
+import time
 import shutil
+import tarfile
+import tempfile
 
 import logging
 import numpy as np
@@ -65,7 +68,7 @@ class RunState(object):
 
     def __init__(self):
         """doc"""
-        self.__dict__ = {'gstep': 0, 'step': 0, 'time': time()}
+        self.__dict__ = {'gstep': 0, 'step': 0, 'time': time.time()}
 
     @property
     def gstep(self):
@@ -107,7 +110,7 @@ class RunState(object):
             self.__dict__,
             gstep=self.gstep + 1,
             step=self.step + 1,
-            time=time())
+            time=time.time())
         ret = RunState()
         ret.__dict__ = newd
         return ret
@@ -121,8 +124,10 @@ class Saver(object):
                  exe,
                  program,
                  save_prefix='model',
-                 max_ckpt_to_keep=None):
+                 max_ckpt_to_keep=None,
+                 save_tarckpt=False):
         """doc"""
+        self.save_tarckpt = save_tarckpt
         assert isinstance(
             exe, F.Executor
         ), 'expect normal executor to save, got executor of type %s' % repr(
@@ -177,6 +182,10 @@ class Saver(object):
                 'can not load model from %s, is this a textone checkpoint?' %
                 dir)
 
+    def tarball(self, src_dir, output_name):
+        with tarfile.open(output_name, "w:") as tar:
+            tar.add(src_dir, arcname=os.path.basename(src_dir))
+
     def save(self, state):
         """doc"""
         save_name = '%s_%d' % (self._save_prefix, state.gstep)
@@ -189,9 +198,18 @@ class Saver(object):
             pass
         log.debug('saving step %d to %s' % (state.gstep, save_dir))
         self._save_program(tmp_dir)
+
         shutil.move(tmp_dir, save_dir)
         meta = state.serialize()
         open(os.path.join(save_dir, 'meta'), 'w').write(meta)
+
+        if self.save_tarckpt:
+            now = time.strftime('%Y%m%d%H%M%S', time.localtime(time.time()))
+            tar_name = save_dir + '_' + now + '.tar'
+            log.debug('taring %s to %s' % (save_dir, tar_name))
+            self.tarball(save_dir, tar_name)
+            save_name = tar_name
+            shutil.rmtree(save_dir)
 
         self.ckpt_list.append(save_name)
         if len(self.ckpt_list) > self._max_ckpt_to_keep:
@@ -219,6 +237,17 @@ class Saver(object):
             path = ckpt
         else:
             raise ValueError('ckpt type not understood %s' % repr(ckpt))
+
+        if tarfile.is_tarfile(path):
+            log.info('restore from tar file : {}'.format(path))
+            tf = tarfile.open(path)
+            dirs = [m for m in tf.getmembers() if m.isdir()]
+            assert(len(dirs) == 1), dirs 
+            tmp_dir = tempfile.mkdtemp()
+            log.info('extracting to : {}'.format(tmp_dir))
+            tf.extractall(tmp_dir)
+            path = os.path.join(tmp_dir, dirs[0].name)
+            log.info('model path : {}'.format(path))
 
         meta_file = os.path.join(path, 'meta')
         if not os.path.exists(meta_file):
@@ -350,7 +379,8 @@ class MonitoredExecutor(object):
             state=None,
             run_config=None,  #none if not load
             run_hooks=[],
-            warm_start_setting=None):
+            warm_start_setting=None,
+            ):
         if not isinstance(executor, F.Executor):
             raise ValueError('PE is no longer supported')
         if isinstance(executor, F.ParallelExecutor):
@@ -372,6 +402,7 @@ class MonitoredExecutor(object):
             self._skip_steps = run_config.skip_steps if run_config.skip_steps else 100
             self._save_prefix = 'model'
             self._max_ckpt = run_config.max_ckpt
+            self._save_tarckpt = run_config.save_tarckpt if hasattr(run_config, 'save_tarckpt') else False
 
     @property
     def state(self):
@@ -393,7 +424,8 @@ class MonitoredExecutor(object):
             self._model_dir,
             F.Executor(_get_one_place()),
             program=self._program,
-            max_ckpt_to_keep=self._max_ckpt)
+            max_ckpt_to_keep=self._max_ckpt, 
+            save_tarckpt=self._save_tarckpt)
 
         if self._warm_start_setting is not None:
             if not os.path.exists(self._warm_start_setting.from_dir):
