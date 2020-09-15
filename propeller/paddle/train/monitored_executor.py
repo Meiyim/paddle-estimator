@@ -220,7 +220,8 @@ class Saver(object):
             for ckpt in ckpt_to_remove:
                 ckpt_dir = os.path.join(self._save_dir, ckpt)
                 if os.path.exists(ckpt_dir):
-                    shutil.rmtree(ckpt_dir)
+                    rm = shutil.rmtree if os.path.isdir(ckpt_dir) else os.remove
+                    rm(ckpt_dir)
                     log.debug('No. of ckpt exceed %d, clean up: %s' %
                               (self._max_ckpt_to_keep, ckpt_dir))
         open(self.ckpt_info_path, 'w').write('\n'.join(self.ckpt_list))
