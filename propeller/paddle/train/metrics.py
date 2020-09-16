@@ -239,6 +239,32 @@ class F1(Precision):
         return 2 * precision * recall / (precision + recall + 1.e-6)
 
 
+class MicroF1(Precision):
+    """doc"""
+    def update(self, args):
+        """doc"""
+        label, pred = args
+        label = label.reshape([-1])
+        pred = pred.reshape([-1])
+        if label.shape != pred.shape:
+            raise ValueError(
+                'Metrics f1: input not match: label:%s pred:%s' %
+                (label, pred))
+        self.label_saver = np.concatenate([self.label_saver, label])
+        self.pred_saver = np.concatenate([self.pred_saver, pred])
+
+    def eval(self):
+        """doc"""
+        return sklearn.metrics.f1_score(self.label_saver, self.pred_saver, average='micro')
+
+
+class MacroF1(Precision):
+
+    def eval(self):
+        """doc"""
+        return sklearn.metrics.f1_score(self.label_saver, self.pred_saver, average='macro')
+
+
 class MCC(Precision):
     """mathew corelation coefitient"""
 

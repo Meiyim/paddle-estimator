@@ -93,7 +93,7 @@ TextoneWarmStartSetting = namedtuple('TextoneWarmStartSetting', ['from_dir'])
 
 RunConfig = namedtuple('RunConfig', [
     'model_dir', 'run_steps', 'max_steps', 'save_steps', 'eval_steps',
-    'eval_max_steps', 'skip_steps', 'log_steps', 'max_ckpt', 'shit'
+    'eval_max_steps', 'skip_steps', 'log_steps', 'max_ckpt', 'save_tarckpt', 'shit'
 ])
 RunConfig.__new__.__defaults__ = (None, ) * len(RunConfig._fields)
 
