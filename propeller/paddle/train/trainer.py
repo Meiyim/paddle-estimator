@@ -220,6 +220,15 @@ class Learner(object):
                                     self.params, self.run_config)
             log.info('Done')
 
+        optimizer_ops = {'sgd', 'adam', 'adagrad'}
+        for op in program.global_block().ops:
+            if op.type == 'dropout':
+                op._set_attr('is_test', True)
+            if op.type == 'batch_norm':
+                op._set_attr('is_test', True)
+            if op.type in optimizer_ops:
+                raise RuntimeError('Found optimizer op in eval graph, op: %s' %
+                                   repr(op))
         #program = program.clone(for_test=True)
 
         log.info(
