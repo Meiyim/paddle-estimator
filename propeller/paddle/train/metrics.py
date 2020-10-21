@@ -325,17 +325,13 @@ class Auc(Metrics):
 
         self.pred = pred
         self.label = label
+        self.tensor = _allgather_2dim(self.label, self.pred)
         self.reset()
 
     def reset(self):
         """doc"""
         self.pred_saver = np.array([], dtype=np.float32)
         self.label_saver = np.array([], dtype=np.bool)
-
-    @property
-    def tensor(self):
-        """doc"""
-        return [self.pred, self.label]
 
     def update(self, args):
         """doc"""
@@ -347,6 +343,7 @@ class Auc(Metrics):
 
     def eval(self):
         """doc"""
+        log.debug(self.pred_saver.shape)
         fpr, tpr, thresholds = sklearn.metrics.roc_curve(
             self.label_saver.astype(np.int64), self.pred_saver)
         auc = sklearn.metrics.auc(fpr, tpr)

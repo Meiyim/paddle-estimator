@@ -294,8 +294,6 @@ class FeatureColumns(object):
             raise ValueError('reading gz from empty file list: %s' % gz_files)
         log.info('reading gz from %s' % '\n'.join(gz_files))
         dataset = Dataset.from_list(gz_files)
-        #if repeat: #remove this to avoid conflict w/ sharding
-        #    dataset = dataset.repeat()
 
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(gz_files))
@@ -317,6 +315,9 @@ class FeatureColumns(object):
                 dataset = dataset.shard(distribution.status.num_replica,
                                         distribution.status.replica_id)
 
+        if repeat:  #remove this to avoid conflict w/ sharding
+            dataset = dataset.repeat()
+
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
@@ -337,11 +338,10 @@ class FeatureColumns(object):
                           data_files,
                           shuffle=False,
                           repeat=True,
+                          shard=False,
                           **kwargs):
         log.info('reading raw files from %s' % '\n'.join(data_files))
         dataset = Dataset.from_list(data_files)
-        #if repeat: #remove this to avoid conflict w/ sharding
-        #    dataset = dataset.repeat()
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(data_files))
 
@@ -362,6 +362,9 @@ class FeatureColumns(object):
                 log.info('Apply dataset sharding in distribution env')
                 dataset = dataset.shard(distribution.status.num_replica,
                                         distribution.status.replica_id)
+
+        if repeat:  #remove this to avoid conflict w/ sharding
+            dataset = dataset.repeat()
 
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
