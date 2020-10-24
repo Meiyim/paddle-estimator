@@ -288,6 +288,38 @@ def _padded_batch_func(dataset,
     return _gen
 
 
+def flatten(structure):
+    flt = []
+    def map_structure(s):
+        if isinstance(s, np.ndarray):
+            flt.append(s)
+            return len(flt) - 1
+        elif isinstance(s, list):
+            return [map_structure(item) for item in s]
+        elif isinstance(s, tuple):
+            return tuple([map_structure(item) for item in s])
+        elif isinstance(s, dict):
+            return {key: map_structure(s[key]) for key in sorted(s.keys())}
+        else:
+            raise TypeError
+    return flt, map_structure(structure)
+
+
+def unflatten(flt, schema):
+    def map_structure(s):
+        if isinstance(s, int):
+            return flt[s]
+        elif isinstance(s, list):
+            return [map_structure(item) for item in s]
+        elif isinstance(s, tuple):
+            return tuple([map_structure(item) for item in s])
+        elif isinstance(s, dict):
+            return {key: map_structure(s[key]) for key in sorted(s.keys())}
+        else:
+            raise TypeError
+    return map_structure(schema)
+
+
 class Dataset(object):
     """Python Wrapper for PyReader"""
 
@@ -361,6 +393,7 @@ class Dataset(object):
         self.name = None
         self._data_shapes = None
         self._data_types = None
+        self._data_schema = None
         self.generator = None
         self.pyreader = None
 
@@ -379,10 +412,11 @@ class Dataset(object):
     #def __call__(self):
     #    return self.generator()
 
-    def _infer_shapes_and_types(self):
+    def _infer_shapes_and_types_and_schema(self):
         if self.generator is not None and self.name is not None:
             log.info('Try to infer data shapes & types from generator')
             first_value = next(self.generator())
+            first_value, self._data_schema = flatten(first_value)
             shapes, types = [], []
             for v in first_value:
                 if not isinstance(v, np.ndarray):
@@ -403,10 +437,19 @@ class Dataset(object):
     def data_shapes(self):
         """doc"""
         if self._data_shapes is None:
-            self._infer_shapes_and_types()
+            self._infer_shapes_and_types_and_schema()
             return self._data_shapes
         else:
             return self._data_shapes
+
+    @property
+    def data_schema(self):
+        """doc"""
+        if self._data_schema is None:
+            self._infer_shapes_and_types_and_schema()
+            return self._data_schema
+        else:
+            return self._data_schema
 
     @data_shapes.setter
     def data_shapes(self, val):
@@ -417,7 +460,7 @@ class Dataset(object):
     def data_types(self):
         """doc"""
         if self._data_types is None:
-            self._infer_shapes_and_types()
+            self._infer_shapes_and_types_and_schema()
             return self._data_types
         else:
             return self._data_types
@@ -513,3 +556,5 @@ class Dataset(object):
     def chain(self, other):
         func = functools.partial(_chain_func, dataset2=other.generator)
         return self.apply(func)
+
+
