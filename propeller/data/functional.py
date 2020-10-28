@@ -415,8 +415,8 @@ class Dataset(object):
     def _infer_shapes_and_types_and_schema(self):
         if self.generator is not None and self.name is not None:
             log.info('Try to infer data shapes & types from generator')
-            gen = self.generator()
-            first_value = next(gen)
+            first_gen = self.generator()
+            first_value = next(first_gen)
             first_value, self._data_schema = flatten(first_value)
             shapes, types = [], []
             for v in first_value:
@@ -430,7 +430,16 @@ class Dataset(object):
             self._data_types = types
             log.info('Dataset `%s` has data_shapes: %s data_types: %s' %
                      (self.name, repr(shapes), repr(types)))
-            self.generator = lambda: itertools.chain([first_value], gen)
+            original_generator = self.generator
+            self.is_first_call = True
+            def _gen():
+                if self.is_first_call:
+                    self.is_first_call = False
+                    generator = itertools.chain([first_value], first_gen)
+                else:
+                    generator = original_generator()
+                yield from generator
+            self.generator = _gen
         else:
             raise ValueError(
                 'Try to infer data shapes or types from incomplete Dataset')
