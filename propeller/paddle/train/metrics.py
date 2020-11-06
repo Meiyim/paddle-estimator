@@ -639,9 +639,7 @@ class PNRatio(Metrics):
                 'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
                 % (repr(label), repr(pred)))
 
-        self.qid = qid
-        self.label = label
-        self.pred = pred
+        self.qid, self.label, self.pred = _allgather_2dim(qid, label, pred)
         self.saver = {}
 
     def reset(self):
