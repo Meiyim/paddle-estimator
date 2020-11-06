@@ -25,6 +25,8 @@ import paddle.fluid as F
 import paddle.fluid.layers as L
 import sklearn.metrics
 
+from propeller.paddle.train import distribution  #import allgather, status, DistributionMode
+
 log = logging.getLogger(__name__)
 
 __all__ = [
@@ -33,17 +35,28 @@ __all__ = [
 ]
 
 
+def _allgather_2dim(*args):
+    if distribution.status.mode == distribution.DistributionMode.LOCAL:
+        return args
+    for a in args:
+        if len(a.shape) > 2:
+            log.warn(
+                'Metrics:%s have shape %s, cannot not be allgathered, will return to single card evaluation'
+                % (a, a.shape))
+        else:
+            pass
+            #log.debug('broadcast %s' % a)
+    ret = [distribution.allgather(a) if len(a.shape) <= 2 else a for a in args]
+    return ret
+
+
 class Metrics(object):
     """Metrics base class"""
 
     def __init__(self):
         """doc"""
         self.saver = []
-
-    @property
-    def tensor(self):
-        """doc"""
-        pass
+        self.tensor = None
 
     def update(self, *args):
         """doc"""
@@ -59,7 +72,7 @@ class Mean(Metrics):
 
     def __init__(self, t):
         """doc"""
-        self.t = t
+        self.t = _allgather_2dim(t)
         self.reset()
 
     def reset(self):
@@ -69,8 +82,7 @@ class Mean(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.t.persistable = True
-        return self.t,
+        return self.t
 
     def update(self, args):
         """doc"""
@@ -80,6 +92,7 @@ class Mean(Metrics):
 
     def eval(self):
         """doc"""
+        log.debug(self.saver.shape)
         return self.saver.mean()
 
 
@@ -96,14 +109,17 @@ class Acc(Mean):
 
     def __init__(self, label, pred):
         """doc"""
-        self.eq = L.equal(pred, label)
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+        self.eq = _allgather_2dim(L.cast(L.equal(pred, label), 'int64'))
         self.reset()
 
     @property
     def tensor(self):
         """doc"""
-        self.eq.persistable = True
-        return self.eq,
+        return self.eq
 
 
 class MSE(Mean):
@@ -111,6 +127,11 @@ class MSE(Mean):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         diff = pred - label
         self.mse = diff * diff
         self.reset()
@@ -118,7 +139,6 @@ class MSE(Mean):
     @property
     def tensor(self):
         """doc"""
-        self.mse.persistable = True
         return self.mse,
 
 
@@ -127,13 +147,17 @@ class Cosine(Mean):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.cos = L.cos_sim(label, pred)
         self.reset()
 
     @property
     def tensor(self):
         """doc"""
-        self.cos.persistable = True
         return self.cos,
 
 
@@ -142,6 +166,11 @@ class MacroF1(Metrics):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.label = label
         self.pred = pred
         self.reset()
@@ -154,9 +183,7 @@ class MacroF1(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.label.persistable = True
-        self.pred.persistable = True
-        return self.label, self.pred
+        return [self.label, self.pred]
 
     def update(self, args):
         """doc"""
@@ -181,21 +208,20 @@ class Precision(Metrics):
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.label = label
         self.pred = pred
         self.reset()
+        self.tensor = _allgather_2dim(self.label, self.pred)
 
     def reset(self):
         """doc"""
         self.label_saver = np.array([], dtype=np.bool)
         self.pred_saver = np.array([], dtype=np.bool)
-
-    @property
-    def tensor(self):
-        """doc"""
-        self.label.persistable = True
-        self.pred.persistable = True
-        return self.label, self.pred
 
     def update(self, args):
         """doc"""
@@ -241,28 +267,29 @@ class F1(Precision):
 
 class MicroF1(Precision):
     """doc"""
+
     def update(self, args):
         """doc"""
         label, pred = args
         label = label.reshape([-1])
         pred = pred.reshape([-1])
         if label.shape != pred.shape:
-            raise ValueError(
-                'Metrics f1: input not match: label:%s pred:%s' %
-                (label, pred))
+            raise ValueError('Metrics f1: input not match: label:%s pred:%s' %
+                             (label, pred))
         self.label_saver = np.concatenate([self.label_saver, label])
         self.pred_saver = np.concatenate([self.pred_saver, pred])
 
     def eval(self):
         """doc"""
-        return sklearn.metrics.f1_score(self.label_saver, self.pred_saver, average='micro')
+        return sklearn.metrics.f1_score(
+            self.label_saver, self.pred_saver, average='micro')
 
 
 class MacroF1(Precision):
-
     def eval(self):
         """doc"""
-        return sklearn.metrics.f1_score(self.label_saver, self.pred_saver, average='macro')
+        return sklearn.metrics.f1_score(
+            self.label_saver, self.pred_saver, average='macro')
 
 
 class MCC(Precision):
@@ -274,26 +301,64 @@ class MCC(Precision):
                                                  self.pred_saver)
 
 
+class PCC(Metrics):
+    """pearson corelation coefitient"""
+
+    def __init__(self, label, pred):
+        """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
+        from scipy.stats import pearsonr
+        self.pearsonr = pearsonr
+        self.label = label
+        self.pred = pred
+        self.tensor = _allgather_2dim(self.label, self.pred)
+        self.reset()
+
+    def reset(self):
+        """doc"""
+        self.label_saver = np.array([], dtype=np.float)
+        self.pred_saver = np.array([], dtype=np.float)
+
+    def update(self, args):
+        """doc"""
+        label, pred = args
+        label = label.reshape([-1]).astype(np.float)
+        pred = pred.reshape([-1]).astype(np.float)
+        if label.shape != pred.shape:
+            raise ValueError('input not match: label:%s pred:%s' %
+                             (label, pred))
+        self.label_saver = np.concatenate([self.label_saver, label])
+        self.pred_saver = np.concatenate([self.pred_saver, pred])
+
+    def eval(self):
+        """doc"""
+        p, _ = self.pearsonr(self.label_saver, self.pred_saver)
+        return p
+
+
 class Auc(Metrics):
     """doc"""
 
     def __init__(self, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.pred = pred
         self.label = label
+        self.tensor = _allgather_2dim(self.label, self.pred)
         self.reset()
 
     def reset(self):
         """doc"""
         self.pred_saver = np.array([], dtype=np.float32)
         self.label_saver = np.array([], dtype=np.bool)
-
-    @property
-    def tensor(self):
-        """doc"""
-        self.pred.persistable = True
-        self.label.persistable = True
-        return [self.pred, self.label]
 
     def update(self, args):
         """doc"""
@@ -305,6 +370,7 @@ class Auc(Metrics):
 
     def eval(self):
         """doc"""
+        log.debug(self.pred_saver.shape)
         fpr, tpr, thresholds = sklearn.metrics.roc_curve(
             self.label_saver.astype(np.int64), self.pred_saver)
         auc = sklearn.metrics.auc(fpr, tpr)
@@ -375,6 +441,11 @@ class Mrr(Metrics):
 
     def __init__(self, qid, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.qid = qid
         self.label = label
         self.pred = pred
@@ -389,9 +460,6 @@ class Mrr(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.qid.persistable = True
-        self.label.persistable = True
-        self.pred.persistable = True
         return [self.qid, self.label, self.pred]
 
     def update(self, args):
@@ -503,9 +571,6 @@ class ChunkF1(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.pred.persistable = True
-        self.label.persistable = True
-        self.seqlen.persistable = True
         return [self.pred, self.label, self.seqlen]
 
     def update(self, args):
@@ -569,6 +634,11 @@ class PNRatio(Metrics):
 
     def __init__(self, qid, label, pred):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.qid = qid
         self.label = label
         self.pred = pred
@@ -581,9 +651,6 @@ class PNRatio(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.qid.persistable = True
-        self.label.persistable = True
-        self.pred.persistable = True
         return [self.qid, self.label, self.pred]
 
     def update(self, args):
@@ -661,6 +728,11 @@ class PrecisionAtK(Metrics):
 
     def __init__(self, qid, label, pred, k=1):
         """doc"""
+        if label.shape != pred.shape:
+            raise ValueError(
+                'expect label shape == pred shape, got: label.shape=%s, pred.shape = %s'
+                % (repr(label), repr(pred)))
+
         self.qid = qid
         self.label = label
         self.pred = pred
@@ -674,9 +746,6 @@ class PrecisionAtK(Metrics):
     @property
     def tensor(self):
         """doc"""
-        self.qid.persistable = True
-        self.label.persistable = True
-        self.pred.persistable = True
         return [self.qid, self.label, self.pred]
 
     def update(self, args):
