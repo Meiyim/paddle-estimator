@@ -29,6 +29,7 @@ from time import time
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
+from propeller.data.functional import unflatten
 from propeller.types import RunMode, StopException, SummaryRecord, StopException
 from propeller.types import ModelSpec, InferenceSpec, ProgramPair, RunConfig
 from propeller.paddle import summary, collection
@@ -153,6 +154,7 @@ class Learner(object):
             with collection.Collections() as collections:
                 log.info('Building Train Graph...')
                 fea = train_dataset.features()
+                fea = unflatten(fea, train_dataset.data_schema)
                 model_spec = _build_net(self.model_fn, fea, RunMode.TRAIN,
                                         self.params, self.run_config)
                 log.info('Building Train Graph: Done')
@@ -187,6 +189,7 @@ class Learner(object):
             #share var with Train net
             log.info('Building Eval Graph')
             fea = ds.features()
+            fea = unflatten(fea, ds.data_schema)
             model_spec = _build_net(self.model_fn, fea, RunMode.EVAL,
                                     self.params, self.run_config)
             log.info('Done')
@@ -216,10 +219,20 @@ class Learner(object):
             #share var with Train net
             log.info('Building Predict Graph')
             fea = ds.features()
+            fea = unflatten(fea, ds.data_schema)
             model_spec = _build_net(self.model_fn, fea, RunMode.PREDICT,
                                     self.params, self.run_config)
             log.info('Done')
 
+        optimizer_ops = {'sgd', 'adam', 'adagrad'}
+        for op in program.global_block().ops:
+            if op.type == 'dropout':
+                op._set_attr('is_test', True)
+            if op.type == 'batch_norm':
+                op._set_attr('is_test', True)
+            if op.type in optimizer_ops:
+                raise RuntimeError('Found optimizer op in eval graph, op: %s' %
+                                   repr(op))
         #program = program.clone(for_test=True)
 
         log.info(
@@ -522,7 +535,14 @@ def train_and_eval(_placeholder=None,
 def _build_model_fn(model_class):
     def _model_fn(features, mode, params, run_config):
         if mode != RunMode.PREDICT:
-            fea, label = features[:-1], features[-1]
+            if isinstance(features, list) or isinstance(features, tuple):
+                fea, label = features[:-1], features[-1]
+            elif isinstance(features, dict):
+                label = {"labels": features["labels"]}
+                del features["labels"]
+                fea = features
+            else:
+                raise TypeError
         else:
             fea = features
 
@@ -557,3 +577,5 @@ def _build_model_fn(model_class):
             raise RuntimeError('unknown run mode %s' % mode)
 
     return _model_fn
+
+
