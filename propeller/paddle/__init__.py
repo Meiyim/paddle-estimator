@@ -30,7 +30,6 @@ def enable_textone():
     except ImportError:
         log.fatal('enable textone failed: textone not found!')
         raise
-    global textone_enabled
     log.info('textone enabled')
     from propeller.paddle.train.monitored_executor import MonitoredExecutor, TextoneTrainer
     if TextoneTrainer is None:
@@ -38,9 +37,23 @@ def enable_textone():
     MonitoredExecutor.saver_class = TextoneTrainer
 
 
+def enable_oldstypled_ckpt():
+    log.warn('enabling old_styled_ckpt')
+    from propeller.paddle.train.monitored_executor import MonitoredExecutor, Saver
+    MonitoredExecutor.saver_class = Saver
+
+
+enable_oldstypled_ckpt()
+
 from propeller.types import *
 from propeller.util import ArgumentParser, parse_hparam, parse_runconfig, parse_file
 
 from propeller.paddle import data
 from propeller.paddle import train
 from propeller.paddle.train import *
+
+import paddle
+paddle_version = [int(i) for i in paddle.__version__.split('.')]
+if paddle_version[1] < 7:
+    raise RuntimeError('propeller 0.2 requires paddle 1.7+, got %s' %
+                       paddle.__version__)

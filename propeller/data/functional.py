@@ -151,6 +151,20 @@ def _shard_func(dataset, num_shards, index):
     return _gen
 
 
+def _chunk_func(dataset, num_shards):
+    def _gen():
+        iterable = dataset()
+        while True:
+            ret = list(itertools.islice(iterable, num_shards))
+            if len(ret) == num_shards:
+                for r in ret:
+                    yield r
+            else:
+                raise StopIteration
+
+    return _gen
+
+
 def _take_func(dataset, count):
     def _gen():
         iterable = dataset()
@@ -229,7 +243,11 @@ def _batch_func(dataset, batch_size):
     return _gen
 
 
-def _padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
+def _padded_batch_func(dataset,
+                       batch_size,
+                       pad_value=0,
+                       max_seqlen=None,
+                       droplast=False):
     if not isinstance(batch_size, int):
         raise ValueError('unknown batch_size: %s' % repr(batch_size))
 
@@ -238,6 +256,8 @@ def _padded_batch_func(dataset, batch_size, pad_value=0, max_seqlen=None):
         pad_value_t = pad_value
         while True:
             buf = list(itertools.islice(iterable, batch_size))
+            if droplast and len(buf) != batch_size:
+                raise StopIteration
             if not len(buf):
                 raise StopIteration
             buf = list(zip(*buf))  # transpose
@@ -449,6 +469,10 @@ class Dataset(object):
             _shard_func, num_shards=num_shards, index=index)
         return self.apply(func)
 
+    def chunk(self, num_shards):
+        func = functools.partial(_chunk_func, num_shards=num_shards)
+        return self.apply(func)
+
     def interleave(self, map_fn, cycle_length, block_length):
         """doc"""
         func = functools.partial(
@@ -462,13 +486,18 @@ class Dataset(object):
         func = functools.partial(_batch_func, batch_size=batch_size)
         return self.apply(func)
 
-    def padded_batch(self, batch_size, pad_value=0, max_seqlen=None):
+    def padded_batch(self,
+                     batch_size,
+                     pad_value=0,
+                     max_seqlen=None,
+                     droplast=False):
         """doc"""
         func = functools.partial(
             _padded_batch_func,
             batch_size=batch_size,
             pad_value=pad_value,
-            max_seqlen=max_seqlen)
+            max_seqlen=max_seqlen,
+            droplast=droplast)
         return self.apply(func)
 
     def take(self, count=1):

@@ -198,7 +198,7 @@ class RawBytesColumn(Column):
 
     def raw_to_proto(self, raw):
         """doc"""
-        fe = feature_pb2.Feature(bytes_list=BytesList(value=[raw]))
+        fe = feature_pb2.Feature(bytes_list=feature_pb2.BytesList(value=[raw]))
         return fe
 
     def proto_to_instance(self, feature):
@@ -294,15 +294,6 @@ class FeatureColumns(object):
             raise ValueError('reading gz from empty file list: %s' % gz_files)
         log.info('reading gz from %s' % '\n'.join(gz_files))
         dataset = Dataset.from_list(gz_files)
-        if repeat:
-            dataset = dataset.repeat()
-
-        if shard:
-            from propeller.paddle.train import distribution
-            if distribution.status.mode == distribution.DistributionMode.NCCL:
-                log.info('Apply dataset sharding in distribution env')
-                train_ds = train_ds.shard(distribution.status.num_replica,
-                                          distribution.status.replica_id)
 
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(gz_files))
@@ -312,6 +303,21 @@ class FeatureColumns(object):
             cycle_length=len(gz_files),
             block_length=1)
         dataset = dataset.apply(fn)
+
+        if shard:
+            if not repeat:
+                raise ValueError(
+                    'sharding on a non repeat dataset, will cause data imbalance. '
+                )
+            from propeller.paddle.train import distribution
+            if distribution.status.mode == distribution.DistributionMode.NCCL:
+                log.info('Apply dataset sharding in distribution env')
+                dataset = dataset.shard(distribution.status.num_replica,
+                                        distribution.status.replica_id)
+
+        if repeat:  #remove this to avoid conflict w/ sharding
+            dataset = dataset.repeat()
+
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
@@ -332,11 +338,10 @@ class FeatureColumns(object):
                           data_files,
                           shuffle=False,
                           repeat=True,
+                          shard=False,
                           **kwargs):
         log.info('reading raw files from %s' % '\n'.join(data_files))
         dataset = Dataset.from_list(data_files)
-        if repeat:
-            dataset = dataset.repeat()
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(data_files))
 
@@ -346,6 +351,21 @@ class FeatureColumns(object):
             cycle_length=len(data_files),
             block_length=1)
         dataset = dataset.apply(fn)
+
+        if shard:
+            if not repeat:
+                raise ValueError(
+                    'sharding on a non repeat dataset, will cause data imbalance. '
+                )
+            from propeller.paddle.train import distribution
+            if distribution.status.mode == distribution.DistributionMode.NCCL:
+                log.info('Apply dataset sharding in distribution env')
+                dataset = dataset.shard(distribution.status.num_replica,
+                                        distribution.status.replica_id)
+
+        if repeat:  #remove this to avoid conflict w/ sharding
+            dataset = dataset.repeat()
+
         if shuffle:
             dataset = dataset.shuffle(buffer_size=1000)
 
