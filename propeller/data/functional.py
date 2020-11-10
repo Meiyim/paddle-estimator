@@ -424,7 +424,8 @@ class Dataset(object):
                     raise ValueError(
                         'dataset generator should use numpy elements, got %s' %
                         first_value)
-                shapes.append(v.shape)
+                # use black magic to keep the same dataset shape.
+                shapes.append([(i > 1) + 1 for i in v.shape])
                 types.append(v.dtype.name)
             self._data_shapes = shapes
             self._data_types = types
