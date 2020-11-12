@@ -36,8 +36,13 @@ __all__ = [
 
 
 def _allgather_2dim(*args):
+    log.info('distribution.status.mode : {}'.format(distribution.status.mode))
     if distribution.status.mode == distribution.DistributionMode.LOCAL:
         return args
+
+    if distribution.status.num_replica == 1:
+        return args
+
     for a in args:
         if len(a.shape) > 2:
             log.warn(
