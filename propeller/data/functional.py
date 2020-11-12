@@ -463,7 +463,10 @@ class Dataset(object):
     def data_schema(self):
         """doc"""
         if self._data_schema is None:
-            self._infer_shapes_and_types_and_schema()
+            if self._data_shapes is not None and self._data_types is not None:
+                self._data_schema = [i for i in range(len(self._data_shapes))]
+            else:
+                self._infer_shapes_and_types_and_schema()
             return self._data_schema
         else:
             return self._data_schema
