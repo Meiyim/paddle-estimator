@@ -221,7 +221,7 @@ class Precision(Metrics):
         self.label = label
         self.pred = pred
         self.reset()
-        self.tensor = _allgather_2dim(self.label, self.pred)
+        self.tensor = _allgather_2dim(self.pred, self.label)
 
     def reset(self):
         """doc"""
@@ -320,7 +320,7 @@ class PCC(Metrics):
         self.pearsonr = pearsonr
         self.label = label
         self.pred = pred
-        self.tensor = _allgather_2dim(self.label, self.pred)
+        self.tensor = _allgather_2dim(self.pred, self.label)
         self.reset()
 
     def reset(self):
@@ -357,7 +357,7 @@ class Auc(Metrics):
 
         self.pred = pred
         self.label = label
-        self.tensor = _allgather_2dim(self.label, self.pred)
+        self.tensor = _allgather_2dim(self.pred, self.label)
         self.reset()
 
     def reset(self):
