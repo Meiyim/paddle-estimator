@@ -230,7 +230,7 @@ class Precision(Metrics):
 
     def update(self, args):
         """doc"""
-        label, pred = args
+        pred, label = args
         label = label.reshape([-1]).astype(np.bool)
         pred = pred.reshape([-1]).astype(np.bool)
         if label.shape != pred.shape:
@@ -330,7 +330,7 @@ class PCC(Metrics):
 
     def update(self, args):
         """doc"""
-        label, pred = args
+        pred, label = args
         label = label.reshape([-1]).astype(np.float)
         pred = pred.reshape([-1]).astype(np.float)
         if label.shape != pred.shape:
