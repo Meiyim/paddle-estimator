@@ -91,12 +91,14 @@ def _shuffle_shard_func(dataset, num_shards, index, seed):
         iterable = dataset()
         random.seed(seed)
         data_list = list(iterable)
+        len_dataset_per_shard = len(data_list) // num_shards
         while True:
             # shuffle
             random.shuffle(data_list)
             # shard
             iter_data_list = [data_list[i] for i in range(index, len(data_list), num_shards)]
-
+            # drop last
+            iter_data_list = iter_data_list[: len_dataset_per_shard]
             for data in iter_data_list:
                 yield data
     return _gen
