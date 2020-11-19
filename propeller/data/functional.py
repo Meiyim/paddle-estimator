@@ -86,6 +86,22 @@ def _shuffle_func(dataset, buffer_size):
     return _gen
 
 
+def _shuffle_shard_func(dataset, num_shards, index, seed):
+    def _gen():
+        iterable = dataset()
+        random.seed(seed)
+        data_list = list(iterable)
+        while True:
+            # shuffle
+            random.shuffle(data_list)
+            # shard
+            iter_data_list = [data_list[i] for i in range(index, len(data_list), num_shards)]
+
+            for data in iter_data_list:
+                yield data
+    return _gen
+
+
 def _interleave_func(iterable, map_fn, cycle_length, block_length):
     def _gen():
         ls = itertools.tee(iterable(), cycle_length)
@@ -575,6 +591,14 @@ class Dataset(object):
 
     def chain(self, other):
         func = functools.partial(_chain_func, dataset2=other.generator)
+        return self.apply(func)
+
+    def cache_shuffle_shard(self, num_shards, index, seed=0):
+        func = functools.partial(
+            _shuffle_shard_func,
+            num_shards=num_shards, index=index, seed=seed
+        )
+
         return self.apply(func)
 
 
