@@ -86,19 +86,23 @@ def _shuffle_func(dataset, buffer_size):
     return _gen
 
 
-def _shuffle_shard_func(dataset, num_shards, index, seed):
+def _cache_shuffle_shard_func(dataset, num_shards, index, seed, drop_last):
     def _gen():
         iterable = dataset()
-        random.seed(seed)
         data_list = list(iterable)
-        len_dataset_per_shard = len(data_list) // num_shards
+        len_per_shard = len(data_list) // num_shards
+        rng = np.random.default_rng(seed)
         while True:
             # shuffle
-            random.shuffle(data_list)
+            random.shuffle(data_list, rng.uniform)
+
             # shard
             iter_data_list = [data_list[i] for i in range(index, len(data_list), num_shards)]
+
             # drop last
-            iter_data_list = iter_data_list[: len_dataset_per_shard]
+            if drop_last:
+                iter_data_list = iter_data_list[: len_per_shard]
+
             for data in iter_data_list:
                 yield data
     return _gen
@@ -597,8 +601,9 @@ class Dataset(object):
 
     def cache_shuffle_shard(self, num_shards, index, seed=0):
         func = functools.partial(
-            _shuffle_shard_func,
-            num_shards=num_shards, index=index, seed=seed
+            _cache_shuffle_shard_func,
+            num_shards=num_shards, index=index,
+            seed=seed, drop_last=True,
         )
 
         return self.apply(func)
