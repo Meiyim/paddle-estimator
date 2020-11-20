@@ -91,17 +91,18 @@ def _cache_shuffle_shard_func(dataset, num_shards, index, seed, drop_last):
         iterable = dataset()
         data_list = list(iterable)
         len_per_shard = len(data_list) // num_shards
-        rng = np.random.default_rng(seed)
+        rng = np.random.RandomState(seed)
         while True:
-            # shuffle
             random.shuffle(data_list, rng.uniform)
 
-            # shard
             iter_data_list = [data_list[i] for i in range(index, len(data_list), num_shards)]
 
-            # drop last
             if drop_last:
                 iter_data_list = iter_data_list[: len_per_shard]
+            else:
+                fill_start_idx = len(data_list) % num_shards
+                if fill_start_idx > 0 and index >= fill_start_idx:
+                    iter_data_list.append(random.choice(data_list))
 
             for data in iter_data_list:
                 yield data
@@ -599,11 +600,11 @@ class Dataset(object):
         func = functools.partial(_chain_func, dataset2=other.generator)
         return self.apply(func)
 
-    def cache_shuffle_shard(self, num_shards, index, seed=0):
+    def cache_shuffle_shard(self, num_shards, index, seed=0, drop_last=True):
         func = functools.partial(
             _cache_shuffle_shard_func,
             num_shards=num_shards, index=index,
-            seed=seed, drop_last=True,
+            seed=seed, drop_last=drop_last,
         )
 
         return self.apply(func)

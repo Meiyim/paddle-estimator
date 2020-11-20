@@ -204,7 +204,7 @@ class RawBytesColumn(Column):
     def proto_to_instance(self, feature):
         """doc"""
         ret = feature.bytes_list.value[
-            0]  #np.array(feature.int64_list.value, dtype=np.int64)
+            0]  # np.array(feature.int64_list.value, dtype=np.int64)
         return ret
 
     def raw_to_instance(self, raw):
@@ -305,21 +305,22 @@ class FeatureColumns(object):
         dataset = dataset.apply(fn)
 
         if shard:
-            if not repeat:
-                raise ValueError(
-                    'sharding on a non repeat dataset, will cause data imbalance. '
-                )
             from propeller.paddle.train import distribution
-            if distribution.status.mode == distribution.DistributionMode.NCCL:
-                log.info('Apply dataset sharding in distribution env')
-                dataset = dataset.shard(distribution.status.num_replica,
-                                        distribution.status.replica_id)
+            if shuffle:
+                if distribution.status.mode == distribution.DistributionMode.NCCL:
+                    assert repeat == False, 'cache shuffle shard dataset must be non-repeated'
+                    dataset = dataset.cache_shuffle_shard(distribution.status.num_replica,
+                                                          distribution.status.replica_id,
+                                                          seed=0, drop_last=True)
+                else:
+                    dataset = dataset.shuffle(buffer_size=1000)
+            else:
+                if distribution.status.mode == distribution.DistributionMode.NCCL:
+                    dataset = dataset.shard(distribution.status.num_replica,
+                                            distribution.status.replica_id)
 
-        if repeat:  #remove this to avoid conflict w/ sharding
+        if repeat:
             dataset = dataset.repeat()
-
-        if shuffle:
-            dataset = dataset.shuffle(buffer_size=1000)
 
         def _parse_gz(record_str):  # function that takes python_str as input
             ex = example_pb2.Example()
@@ -353,21 +354,22 @@ class FeatureColumns(object):
         dataset = dataset.apply(fn)
 
         if shard:
-            if not repeat:
-                raise ValueError(
-                    'sharding on a non repeat dataset, will cause data imbalance. '
-                )
             from propeller.paddle.train import distribution
-            if distribution.status.mode == distribution.DistributionMode.NCCL:
-                log.info('Apply dataset sharding in distribution env')
-                dataset = dataset.shard(distribution.status.num_replica,
-                                        distribution.status.replica_id)
+            if shuffle:
+                if distribution.status.mode == distribution.DistributionMode.NCCL:
+                    assert repeat == False, 'cache shuffle shard dataset must be non-repeated'
+                    dataset = dataset.cache_shuffle_shard(distribution.status.num_replica,
+                                                          distribution.status.replica_id,
+                                                          seed=0, drop_last=True)
+                else:
+                    dataset = dataset.shuffle(buffer_size=1000)
+            else:
+                if distribution.status.mode == distribution.DistributionMode.NCCL:
+                    dataset = dataset.shard(distribution.status.num_replica,
+                                            distribution.status.replica_id)
 
-        if repeat:  #remove this to avoid conflict w/ sharding
+        if repeat:
             dataset = dataset.repeat()
-
-        if shuffle:
-            dataset = dataset.shuffle(buffer_size=1000)
 
         def _parse_txt_file(
                 record_str):  # function that takes python_str as input
@@ -471,7 +473,7 @@ def _make_gz(args):
             log.debug('making gz %s => %s' % (from_file, to_file))
             for i, line in enumerate(fin):
                 line = line.strip(b'\n').split(sep)
-                #if i % 10000 == 0:
+                # if i % 10000 == 0:
                 #    log.debug('making gz %s => %s [%d]' % (from_file, to_file, i))
                 if len(line) != len(columns):
                     log.error('columns not match at %s, got %d, expect %d' %
