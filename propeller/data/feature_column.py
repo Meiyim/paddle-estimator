@@ -287,7 +287,7 @@ class FeatureColumns(object):
     def _read_gz_dataset(self,
                          gz_files,
                          shuffle=False,
-                         repeat=True,
+                         repeat=False,
                          shard=False,
                          **kwargs):
         if len(gz_files) == 0:
@@ -304,20 +304,22 @@ class FeatureColumns(object):
             block_length=1)
         dataset = dataset.apply(fn)
 
+        seed = kwargs.pop('seed', 0)
         if shard:
             from propeller.paddle.train import distribution
             if shuffle:
                 if distribution.status.mode == distribution.DistributionMode.NCCL:
-                    assert repeat == False, 'cache shuffle shard dataset must be non-repeated'
                     dataset = dataset.cache_shuffle_shard(distribution.status.num_replica,
                                                           distribution.status.replica_id,
-                                                          seed=0, drop_last=True)
+                                                          seed=seed, drop_last=True)
                 else:
-                    dataset = dataset.shuffle(buffer_size=1000)
+                    dataset = dataset.cache_shuffle_shard(num_shards=1, index=0, seed=seed, drop_last=True)
             else:
                 if distribution.status.mode == distribution.DistributionMode.NCCL:
                     dataset = dataset.shard(distribution.status.num_replica,
                                             distribution.status.replica_id)
+        elif shuffle:
+            dataset = dataset.cache_shuffle_shard(num_shards=1, index=0, seed=seed, drop_last=True)
 
         if repeat:
             dataset = dataset.repeat()
@@ -338,7 +340,7 @@ class FeatureColumns(object):
     def _read_txt_dataset(self,
                           data_files,
                           shuffle=False,
-                          repeat=True,
+                          repeat=False,
                           shard=False,
                           **kwargs):
         log.info('reading raw files from %s' % '\n'.join(data_files))
@@ -353,20 +355,22 @@ class FeatureColumns(object):
             block_length=1)
         dataset = dataset.apply(fn)
 
+        seed = kwargs.pop('seed', 0)
         if shard:
             from propeller.paddle.train import distribution
             if shuffle:
                 if distribution.status.mode == distribution.DistributionMode.NCCL:
-                    assert repeat == False, 'cache shuffle shard dataset must be non-repeated'
                     dataset = dataset.cache_shuffle_shard(distribution.status.num_replica,
                                                           distribution.status.replica_id,
-                                                          seed=0, drop_last=True)
+                                                          seed=seed, drop_last=True)
                 else:
-                    dataset = dataset.shuffle(buffer_size=1000)
+                    dataset = dataset.cache_shuffle_shard(num_shards=1, index=0, seed=seed, drop_last=True)
             else:
                 if distribution.status.mode == distribution.DistributionMode.NCCL:
                     dataset = dataset.shard(distribution.status.num_replica,
                                             distribution.status.replica_id)
+        elif shuffle:
+            dataset = dataset.cache_shuffle_shard(num_shards=1, index=0, seed=seed, drop_last=True)
 
         if repeat:
             dataset = dataset.repeat()

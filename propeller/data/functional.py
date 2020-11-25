@@ -101,13 +101,12 @@ def _cache_shuffle_shard_func(dataset, num_shards, index, seed, drop_last):
                 iter_data_list = iter_data_list[: len_per_shard]
             else:
                 fill_start_idx = len(data_list) % num_shards
-                if fill_start_idx > 0 and index >= fill_start_idx:
+                if 0 < fill_start_idx <= index:
                     iter_data_list.append(random.choice(data_list))
 
             for data in iter_data_list:
                 yield data
     return _gen
-
 
 def _interleave_func(iterable, map_fn, cycle_length, block_length):
     def _gen():
@@ -116,7 +115,9 @@ def _interleave_func(iterable, map_fn, cycle_length, block_length):
         for i, j in enumerate(ls):
             j = itertools.islice(j, i, None, cycle_length)
             j = map(map_fn, j)
+
             j = (jjj for jj in j for jjj in jj)  #flatten
+
             buf.append(j)
 
         for tup in six.moves.zip_longest(*buf):
@@ -128,11 +129,14 @@ def _interleave_func(iterable, map_fn, cycle_length, block_length):
 
 def _repeat_func(dataset, n):
     def _gen():
-        iterable = dataset()
+        # iterable = dataset()
         if n >= 0:
-            ret = itertools.chain(*itertools.tee(iterable, n))
+            iters = []
+            for i in range(n):
+                iters.append(dataset())
+            ret = itertools.chain(*iters)
         else:
-            ret = itertools.cycle(iterable)
+            ret = itertools.cycle(dataset())
 
         for i in ret:
             yield i
