@@ -86,6 +86,28 @@ def _shuffle_func(dataset, buffer_size):
     return _gen
 
 
+def _cache_shuffle_shard_func(dataset, num_shards, index, seed, drop_last):
+    def _gen():
+        iterable = dataset()
+        data_list = list(iterable)
+        len_per_shard = len(data_list) // num_shards
+        rng = np.random.RandomState(seed)
+        while True:
+            random.shuffle(data_list, rng.uniform)
+
+            iter_data_list = [data_list[i] for i in range(index, len(data_list), num_shards)]
+
+            if drop_last:
+                iter_data_list = iter_data_list[: len_per_shard]
+            else:
+                fill_start_idx = len(data_list) % num_shards
+                if 0 < fill_start_idx <= index:
+                    iter_data_list.append(random.choice(data_list))
+
+            for data in iter_data_list:
+                yield data
+    return _gen
+
 def _interleave_func(iterable, map_fn, cycle_length, block_length):
     def _gen():
         ls = itertools.tee(iterable(), cycle_length)
@@ -93,7 +115,9 @@ def _interleave_func(iterable, map_fn, cycle_length, block_length):
         for i, j in enumerate(ls):
             j = itertools.islice(j, i, None, cycle_length)
             j = map(map_fn, j)
+
             j = (jjj for jj in j for jjj in jj)  #flatten
+
             buf.append(j)
 
         for tup in six.moves.zip_longest(*buf):
@@ -105,11 +129,14 @@ def _interleave_func(iterable, map_fn, cycle_length, block_length):
 
 def _repeat_func(dataset, n):
     def _gen():
-        iterable = dataset()
+        # iterable = dataset()
         if n >= 0:
-            ret = itertools.chain(*itertools.tee(iterable, n))
+            iters = []
+            for i in range(n):
+                iters.append(dataset())
+            ret = itertools.chain(*iters)
         else:
-            ret = itertools.cycle(iterable)
+            ret = itertools.cycle(dataset())
 
         for i in ret:
             yield i
@@ -575,6 +602,15 @@ class Dataset(object):
 
     def chain(self, other):
         func = functools.partial(_chain_func, dataset2=other.generator)
+        return self.apply(func)
+
+    def cache_shuffle_shard(self, num_shards, index, seed=0, drop_last=True):
+        func = functools.partial(
+            _cache_shuffle_shard_func,
+            num_shards=num_shards, index=index,
+            seed=seed, drop_last=drop_last,
+        )
+
         return self.apply(func)
 
 
