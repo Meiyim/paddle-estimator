@@ -198,13 +198,13 @@ class RawBytesColumn(Column):
 
     def raw_to_proto(self, raw):
         """doc"""
-        fe = feature_pb2.Feature(bytes_list=BytesList(value=[raw]))
+        fe = feature_pb2.Feature(bytes_list=feature_pb2.BytesList(value=[raw]))
         return fe
 
     def proto_to_instance(self, feature):
         """doc"""
         ret = feature.bytes_list.value[
-            0]  #np.array(feature.int64_list.value, dtype=np.int64)
+            0]  # np.array(feature.int64_list.value, dtype=np.int64)
         return ret
 
     def raw_to_instance(self, raw):
@@ -287,22 +287,13 @@ class FeatureColumns(object):
     def _read_gz_dataset(self,
                          gz_files,
                          shuffle=False,
-                         repeat=True,
+                         repeat=False,
                          shard=False,
                          **kwargs):
         if len(gz_files) == 0:
             raise ValueError('reading gz from empty file list: %s' % gz_files)
         log.info('reading gz from %s' % '\n'.join(gz_files))
         dataset = Dataset.from_list(gz_files)
-        if repeat:
-            dataset = dataset.repeat()
-
-        if shard:
-            from propeller.paddle.train import distribution
-            if distribution.status.mode == distribution.DistributionMode.NCCL:
-                log.info('Apply dataset sharding in distribution env')
-                train_ds = train_ds.shard(distribution.status.num_replica,
-                                          distribution.status.replica_id)
 
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(gz_files))
@@ -312,8 +303,30 @@ class FeatureColumns(object):
             cycle_length=len(gz_files),
             block_length=1)
         dataset = dataset.apply(fn)
-        if shuffle:
-            dataset = dataset.shuffle(buffer_size=1000)
+
+        seed = kwargs.pop('seed', 0)
+        if shard:
+            from propeller.paddle.train import distribution
+            if shuffle:
+                if distribution.status.mode == distribution.DistributionMode.NCCL:
+                    dataset = dataset.cache_shuffle_shard(
+                        distribution.status.num_replica,
+                        distribution.status.replica_id,
+                        seed=seed,
+                        drop_last=True)
+                else:
+                    dataset = dataset.cache_shuffle_shard(
+                        num_shards=1, index=0, seed=seed, drop_last=True)
+            else:
+                if distribution.status.mode == distribution.DistributionMode.NCCL:
+                    dataset = dataset.shard(distribution.status.num_replica,
+                                            distribution.status.replica_id)
+        elif shuffle:
+            dataset = dataset.cache_shuffle_shard(
+                num_shards=1, index=0, seed=seed, drop_last=True)
+
+        if repeat:
+            dataset = dataset.repeat()
 
         def _parse_gz(record_str):  # function that takes python_str as input
             ex = example_pb2.Example()
@@ -331,12 +344,11 @@ class FeatureColumns(object):
     def _read_txt_dataset(self,
                           data_files,
                           shuffle=False,
-                          repeat=True,
+                          repeat=False,
+                          shard=False,
                           **kwargs):
         log.info('reading raw files from %s' % '\n'.join(data_files))
         dataset = Dataset.from_list(data_files)
-        if repeat:
-            dataset = dataset.repeat()
         if shuffle:
             dataset = dataset.shuffle(buffer_size=len(data_files))
 
@@ -346,8 +358,30 @@ class FeatureColumns(object):
             cycle_length=len(data_files),
             block_length=1)
         dataset = dataset.apply(fn)
-        if shuffle:
-            dataset = dataset.shuffle(buffer_size=1000)
+
+        seed = kwargs.pop('seed', 0)
+        if shard:
+            from propeller.paddle.train import distribution
+            if shuffle:
+                if distribution.status.mode == distribution.DistributionMode.NCCL:
+                    dataset = dataset.cache_shuffle_shard(
+                        distribution.status.num_replica,
+                        distribution.status.replica_id,
+                        seed=seed,
+                        drop_last=True)
+                else:
+                    dataset = dataset.cache_shuffle_shard(
+                        num_shards=1, index=0, seed=seed, drop_last=True)
+            else:
+                if distribution.status.mode == distribution.DistributionMode.NCCL:
+                    dataset = dataset.shard(distribution.status.num_replica,
+                                            distribution.status.replica_id)
+        elif shuffle:
+            dataset = dataset.cache_shuffle_shard(
+                num_shards=1, index=0, seed=seed, drop_last=True)
+
+        if repeat:
+            dataset = dataset.repeat()
 
         def _parse_txt_file(
                 record_str):  # function that takes python_str as input
@@ -451,7 +485,7 @@ def _make_gz(args):
             log.debug('making gz %s => %s' % (from_file, to_file))
             for i, line in enumerate(fin):
                 line = line.strip(b'\n').split(sep)
-                #if i % 10000 == 0:
+                # if i % 10000 == 0:
                 #    log.debug('making gz %s => %s [%d]' % (from_file, to_file, i))
                 if len(line) != len(columns):
                     log.error('columns not match at %s, got %d, expect %d' %

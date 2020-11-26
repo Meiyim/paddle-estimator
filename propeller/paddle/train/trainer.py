@@ -29,6 +29,7 @@ from time import time
 import paddle.fluid as F
 import paddle.fluid.layers as L
 
+from propeller.data.functional import unflatten
 from propeller.types import RunMode, StopException, SummaryRecord, StopException
 from propeller.types import ModelSpec, InferenceSpec, ProgramPair, RunConfig
 from propeller.paddle import summary, collection
@@ -66,30 +67,29 @@ def _log_eval_result(name, eval_result, swriter, state):
     printable = []
     for n, val in six.iteritems(eval_result):
         #assert val.shape == (), 'metrics eval use float'
-        printable.append('{}\t{}'.format(n, val))
+        printable.append('{}:{}'.format(n, val))
         if swriter is not None:
             swriter.add_scalar(n, val, state.gstep)
             log.debug('write to tensorboard %s' % swriter.logdir)
 
-    if len(printable):
-        log.info('*** eval res: %10s ***' % name)
-        for p in printable:
-            log.info(p)
-        log.info('******************************')
+    if printable:
+        log.info('[Eval:%s]:' % name + '\t'.join(printable))
 
 
 def _build_net(model_fn, features, mode, params, run_config):
     model_spec = model_fn(
         features=features, mode=mode, params=params, run_config=run_config)
 
-    if mode == RunMode.TRAIN:
+    if mode == RunMode.TRAIN or mode == RunMode.EVAL:
         if not isinstance(model_spec.loss, F.framework.Variable):
             raise ValueError('model_spec.metrics should be Variable, got %s' %
                              repr(model_spec.loss))
         if not (model_spec.loss.shape == () or model_spec.loss.shape == (1, )):
             raise ValueError('expect scarlar loss, got %s' %
                              repr(model_spec.loss.shape))
-        model_spec.loss.persistable = True
+
+    if mode == RunMode.TRAIN:
+        pass
     elif mode == RunMode.EVAL:
         if not isinstance(model_spec.metrics, dict):
             raise ValueError('model_spec.metrics should be dict, got %s' %
@@ -151,26 +151,25 @@ class Learner(object):
         train_program = F.Program()
         startup_prog = F.Program()
         with F.program_guard(train_program, startup_prog):
-            with F.unique_name.guard():
-                with collection.Collections() as collections:
-                    log.info('Building Train Graph...')
-                    fea = train_dataset.features()
-                    model_spec = _build_net(self.model_fn, fea, RunMode.TRAIN,
-                                            self.params, self.run_config)
-                    log.info('Building Train Graph: Done')
+            with collection.Collections() as collections:
+                log.info('Building Train Graph...')
+                fea = train_dataset.features()
+                fea = unflatten(fea, train_dataset.data_schema)
+                model_spec = _build_net(self.model_fn, fea, RunMode.TRAIN,
+                                        self.params, self.run_config)
+                log.info('Building Train Graph: Done')
 
-                scalars = collections.get(collection.Key.SUMMARY_SCALAR)
-                histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
-                skip_optimize_ops = collections.get(
-                    collection.Key.SKIP_OPTIMIZE)
-                skip_opt = set()
-                if skip_optimize_ops is not None:
-                    skip_opt |= set(skip_optimize_ops)
-                if scalars is not None:
-                    skip_opt |= {t for _, t in scalars}
-                if histograms is not None:
-                    skip_opt |= {t for _, t in histograms}
-                skip_opt = list(skip_opt)
+            scalars = collections.get(collection.Key.SUMMARY_SCALAR)
+            histograms = collections.get(collection.Key.SUMMARY_HISTOGRAM)
+            skip_optimize_ops = collections.get(collection.Key.SKIP_OPTIMIZE)
+            skip_opt = set()
+            if skip_optimize_ops is not None:
+                skip_opt |= set(skip_optimize_ops)
+            if scalars is not None:
+                skip_opt |= {t for _, t in scalars}
+            if histograms is not None:
+                skip_opt |= {t for _, t in histograms}
+            skip_opt = list(skip_opt)
         log.info(
             'Train with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
             % (repr(self.run_config), repr(self.params), repr(model_spec)))
@@ -188,13 +187,24 @@ class Learner(object):
         startup_prog = F.Program()
         with F.program_guard(program, startup_prog):
             #share var with Train net
-            with F.unique_name.guard():
-                log.info('Building Eval Graph')
-                fea = ds.features()
-                model_spec = _build_net(self.model_fn, fea, RunMode.EVAL,
-                                        self.params, self.run_config)
-                log.info('Done')
-        program = program.clone(for_test=True)
+            log.info('Building Eval Graph')
+            fea = ds.features()
+            fea = unflatten(fea, ds.data_schema)
+            model_spec = _build_net(self.model_fn, fea, RunMode.EVAL,
+                                    self.params, self.run_config)
+            log.info('Done')
+        #program = program.clone(for_test=True)
+        # program check
+        optimizer_ops = {'sgd', 'adam', 'adagrad'}
+        for op in program.global_block().ops:
+            if op.type == 'dropout':
+                op._set_attr('is_test', True)
+            if op.type == 'batch_norm':
+                op._set_attr('is_test', True)
+            if op.type in optimizer_ops:
+                raise RuntimeError('Found optimizer op in eval graph, op: %s' %
+                                   repr(op))
+
         log.info(
             'Eval with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
             % (repr(self.run_config), repr(self.params), repr(model_spec)))
@@ -207,14 +217,23 @@ class Learner(object):
         startup_prog = F.Program()
         with F.program_guard(program, startup_prog):
             #share var with Train net
-            with F.unique_name.guard():
-                log.info('Building Predict Graph')
-                fea = ds.features()
-                model_spec = _build_net(self.model_fn, fea, RunMode.PREDICT,
-                                        self.params, self.run_config)
-                log.info('Done')
+            log.info('Building Predict Graph')
+            fea = ds.features()
+            fea = unflatten(fea, ds.data_schema)
+            model_spec = _build_net(self.model_fn, fea, RunMode.PREDICT,
+                                    self.params, self.run_config)
+            log.info('Done')
 
-        program = program.clone(for_test=True)
+        optimizer_ops = {'sgd', 'adam', 'adagrad'}
+        for op in program.global_block().ops:
+            if op.type == 'dropout':
+                op._set_attr('is_test', True)
+            if op.type == 'batch_norm':
+                op._set_attr('is_test', True)
+            if op.type in optimizer_ops:
+                raise RuntimeError('Found optimizer op in eval graph, op: %s' %
+                                   repr(op))
+        #program = program.clone(for_test=True)
 
         log.info(
             'Predict with: \n> Run_config: %s\n> Params: %s\n> Train_model_spec: %s\n'
@@ -239,6 +258,7 @@ class Learner(object):
                 summary_writer=_get_summary_writer(
                     os.path.join(self.run_config.model_dir, 'train_history')),
                 per_step=self.run_config.log_steps,
+                prefix=self.run_config.log_prefix or 'training',
                 skip_step=self.run_config.skip_steps),
         ]
         if model_spec.train_hooks is not None:
@@ -296,14 +316,17 @@ class Learner(object):
         mon_exe = MonitoredExecutor(
             eval_executor,
             program,
+            loss=model_spec.loss,
             run_config=self.run_config,
             run_hooks=eval_run_hooks,
             warm_start_setting=self.warm_start_setting)
+        distribution.init_distribuition_env(
+            program)  #only initialize distribute training with 
         mon_exe.init_or_restore_variables()
 
         try:
             with mon_exe:
-                for data in eval_dataset.start(places=[single_card_place]):
+                for data in eval_dataset.start():
                     mon_exe.run(feed=data)
         except (StopException, F.core.EOFException) as e:
             pass
@@ -314,7 +337,7 @@ class Learner(object):
             os.path.join(self.run_config.model_dir, 'eval_history'))
         _log_eval_result('eval', eval_result, summary_writer, mon_exe.state)
 
-        return mon_exe.result
+        return eval_result
 
     def predict(self,
                 predict_dataset,
@@ -490,19 +513,21 @@ def train_and_eval(_placeholder=None,
                     eval_results[name] = eval_res
                     _log_eval_result(name, eval_res,
                                      self.summary_writers[name], state)
-                for exporter in exporters:
-                    exporter.export(eval_executor, self.program,
-                                    self.model_spec, eval_results, state)
+
+                if distribution.status.is_master:
+                    for exporter in exporters:
+                        exporter.export(eval_executor, self.program,
+                                        self.model_spec, eval_results, state)
             else:
                 eval_results = {}
             return eval_results
 
         def after_train(self, _, __):
             for _, w in six.iteritems(self.summary_writers):
-                w.close()
+                if w:
+                    w.close()
 
-    if distribution.status.is_master:
-        train_hooks.append(_EvalHookOnTrainLoop())
+    train_hooks.append(_EvalHookOnTrainLoop())
     res = est.train(train_dataset, train_hooks=train_hooks)
     return res
 
@@ -510,7 +535,14 @@ def train_and_eval(_placeholder=None,
 def _build_model_fn(model_class):
     def _model_fn(features, mode, params, run_config):
         if mode != RunMode.PREDICT:
-            fea, label = features[:-1], features[-1]
+            if isinstance(features, list) or isinstance(features, tuple):
+                fea, label = features[:-1], features[-1]
+            elif isinstance(features, dict):
+                label = {"labels": features["labels"]}
+                del features["labels"]
+                fea = features
+            else:
+                raise TypeError
         else:
             fea = features
 
