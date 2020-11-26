@@ -129,18 +129,12 @@ def _interleave_func(iterable, map_fn, cycle_length, block_length):
 
 def _repeat_func(dataset, n):
     def _gen():
-        # iterable = dataset()
-        if n >= 0:
-            iters = []
-            for i in range(n):
-                iters.append(dataset())
-            ret = itertools.chain(*iters)
-        else:
-            ret = itertools.cycle(dataset())
-
-        for i in ret:
-            yield i
-
+        count = 0
+        while count != n:
+            iterable = dataset()
+            for data in iterable:
+                yield data
+            count += 1
     return _gen
 
 
