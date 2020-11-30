@@ -21,6 +21,7 @@ import paddle.fluid as F
 import paddle.fluid.layers as L
 
 from propeller.data.functional import Dataset as DatasetBase
+from propeller.data.functional import flatten
 
 log = logging.getLogger(__name__)
 
@@ -64,12 +65,16 @@ class Dataset(DatasetBase):
         def _gen():
             try:
                 for idx, i in enumerate(self.generator()):
+                    i, _ = flatten(i)
                     yield i
             except Exception as e:
                 log.exception(e)
                 raise e
 
         r = F.io.PyReader(
-            feed_list=self.placeholders(), capacity=50, iterable=True)
+            feed_list=self.placeholders(),
+            capacity=50,
+            iterable=True,
+            return_list=F.in_dygraph_mode())
         r.decorate_batch_generator(_gen, places=places)
         return r()

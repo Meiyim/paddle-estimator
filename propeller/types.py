@@ -81,7 +81,8 @@ class HParams(object):
     def join(self, other):
         """doc"""
         if not isinstance(other, HParams):
-            raise ValueError('input must be HParams instance.')
+            raise ValueError('input must be HParams instance. got %s' %
+                             type(other))
         self.__dict__.update(**other.__dict__)
         return self
 
@@ -93,7 +94,8 @@ TextoneWarmStartSetting = namedtuple('TextoneWarmStartSetting', ['from_dir'])
 
 RunConfig = namedtuple('RunConfig', [
     'model_dir', 'run_steps', 'max_steps', 'save_steps', 'eval_steps',
-    'eval_max_steps', 'skip_steps', 'log_steps', 'max_ckpt', 'shit'
+    'eval_max_steps', 'skip_steps', 'log_steps', 'max_ckpt', 'shit',
+    'log_prefix'
 ])
 RunConfig.__new__.__defaults__ = (None, ) * len(RunConfig._fields)
 

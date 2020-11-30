@@ -150,6 +150,7 @@ class LoggingHook(RunHook):
                  loss,
                  per_step=10,
                  skip_step=100,
+                 prefix='training',
                  summary_writer=None,
                  summary_record=None):
         """doc"""
@@ -158,6 +159,7 @@ class LoggingHook(RunHook):
                              (per_step, skip_step))
         self.loss = loss
         self.per_step = per_step
+        self.prefix = prefix
         self.skip_step = skip_step
         self.summary_record = summary_record
         self.writer = summary_writer
@@ -225,12 +227,17 @@ class LoggingHook(RunHook):
 
             # log to stdout
             log.debug('\t'.join([
+                '[%s]' % self.prefix,
                 'step: %d' % state.gstep,
                 'steps/sec: %.5f' % speed,
                 'loss: %.5f' % loss,
                 '' if self.summary_record is None else ' '.join(
                     map(lambda t: '%s:%s' % t, zip(self.s_name, s_np))),
             ]))
+
+    def after_train(self, program, state):
+        if self.writer is not None:
+            self.writer.close()
 
 
 class StopAtStepHook(RunHook):
@@ -309,7 +316,6 @@ class EvalHook(RunHook):
 
     def after_train(self, program, state):
         """doc"""
-        printable = []
         self._result = {}
         for n, m in zip(self.names, self.metrics):
             val = m.eval()
